@@ -1,0 +1,100 @@
+{
+ "version": 2,
+ "made": "2026-11-26",
+ "area": 3,
+ "bbox": [
+  -9413537.395087201,
+  4701198.445962511,
+  -9407335.519895397,
+  4707400.321154315
+ ],
+ "center": [
+  -9410436.4574913,
+  4704299.383558413
+ ],
+ "layers": {
+  "ImageServices/Ky_NAIP_2004_1M": "ky-naip-2004-1m.webp",
+  "ImageServices/Ky_NAIP_2006_2FT": "ky-naip-2006-2ft.webp",
+  "ImageServices/Ky_NAIP_2008_1M": "ky-naip-2008-1m.webp",
+  "ImageServices/Ky_NAIP_2010_1M": "ky-naip-2010-1m.webp",
+  "ImageServices/Ky_NAIP_2012_1M": "ky-naip-2012-1m.webp",
+  "ImageServices/Ky_NAIP_2014_1M": "ky-naip-2014-1m.webp",
+  "ImageServices/Ky_NAIP_2016_2FT": "ky-naip-2016-2ft.webp",
+  "ImageServices/Ky_NAIP_2018_2FT": "ky-naip-2018-2ft.webp",
+  "ImageServices/Ky_NAIP_2020_2FT": "ky-naip-2020-2ft.webp",
+  "ImageServices/Ky_NAIP_2022_2FT": "ky-naip-2022-2ft.webp",
+  "ImageServices/Ky_DOQ_BW_PHASE1_1M": "ky-doq-bw-phase1-1m.webp",
+  "ImageServices/Ky_NKAPC_2007_6IN": "ky-nkapc-2007-6in.webp",
+  "ImageServices/Ky_NKY_USGS_2009_1FT": "ky-nky-usgs-2009-1ft.webp",
+  "ImageServices/Ky_KYAPED_NKY_2012_6IN": "ky-kyaped-nky-2012-6in.webp",
+  "ImageServices/Ky_KYAPED_Phase2_6IN": "ky-kyaped-phase2-6in.webp",
+  "ImageServices/Ky_KYAPED_Phase3_3IN": "ky-kyaped-phase3-3in.webp",
+  "ImageServices/KY_NLCD_1992_30M": "ky-nlcd-1992-30m.png",
+  "ImageServices/Ky_NLCD_2001_30M": "ky-nlcd-2001-30m.png",
+  "ImageServices/Ky_NLCD_2006_30M": "ky-nlcd-2006-30m.png",
+  "ImageServices/Ky_NLCD_2011_30M": "ky-nlcd-2011-30m.png",
+  "ImageServices/Ky_NLCD_2016_30M": "ky-nlcd-2016-30m.png",
+  "ImageServices/Ky_NLCD_2019_30M": "ky-nlcd-2019-30m.png",
+  "ImageServices/Ky_NLCD_2021_30M": "ky-nlcd-2021-30m.png",
+  "linkgis:Archive_Aerials/ArchiveAerial_1962": "archiveaerial-1962.webp",
+  "linkgis:Archive_Aerials/ArchiveAerial_1973": "archiveaerial-1973.webp",
+  "linkgis:Archive_Aerials/ArchiveAerial_1989": "archiveaerial-1989.webp",
+  "linkgis:Archive_Aerials/ArchiveAerial_1999": false,
+  "linkgis:Basemaps/AerialBase_2023": "aerialbase-2023.webp",
+  "linkgis:Basemaps/AerialBase_2025_HighScale_CC_KC_PC": "aerialbase-2025-highscale-cc-kc-pc.webp",
+  "linkgis:Basemaps/AerialBase_2026_HighScale_CC_KC": "aerialbase-2026-highscale-cc-kc.webp"
+ },
+ "inset": {
+  "bbox": [
+   -9411470.608066496,
+   4703265.232983218,
+   -9409402.306916103,
+   4705333.534133608
+  ],
+  "dem": {
+   "file": "inset-dem.txt",
+   "base": 751,
+   "step": 0.05,
+   "n": 1366
+  },
+  "canopy": {
+   "file": "inset-canopy.txt",
+   "step": 0.6
+  },
+  "layers": {
+   "ImageServices/Ky_NAIP_2020_2FT": "inset-ky-naip-2020-2ft.webp",
+   "ImageServices/Ky_NAIP_2022_2FT": "inset-ky-naip-2022-2ft.webp",
+   "ImageServices/Ky_DOQ_BW_PHASE1_1M": "inset-ky-doq-bw-phase1-1m.webp",
+   "ImageServices/Ky_NKAPC_2007_6IN": "inset-ky-nkapc-2007-6in.webp",
+   "ImageServices/Ky_NKY_USGS_2009_1FT": "inset-ky-nky-usgs-2009-1ft.webp",
+   "ImageServices/Ky_KYAPED_NKY_2012_6IN": "inset-ky-kyaped-nky-2012-6in.webp",
+   "ImageServices/Ky_KYAPED_Phase2_6IN": "inset-ky-kyaped-phase2-6in.webp",
+   "ImageServices/Ky_KYAPED_Phase3_3IN": "inset-ky-kyaped-phase3-3in.webp",
+   "linkgis:Archive_Aerials/ArchiveAerial_1973": "inset-archiveaerial-1973.webp",
+   "linkgis:Archive_Aerials/ArchiveAerial_1989": "inset-archiveaerial-1989.webp",
+   "linkgis:Basemaps/AerialBase_2023": "inset-aerialbase-2023.webp",
+   "linkgis:Basemaps/AerialBase_2025_HighScale_CC_KC_PC": "inset-aerialbase-2025-highscale-cc-kc-pc.webp",
+   "linkgis:Basemaps/AerialBase_2026_HighScale_CC_KC": "inset-aerialbase-2026-highscale-cc-kc.webp"
+  },
+  "layers8k": {
+   "ImageServices/Ky_KYAPED_Phase3_3IN": "inset8k-ky-kyaped-phase3-3in.webp"
+  }
+ },
+ "dem": {
+  "file": "dem.txt",
+  "base": 634,
+  "step": 0.05,
+  "n": 1024
+ },
+ "canopy": {
+  "file": "canopy.txt",
+  "step": 0.6
+ },
+ "trees": {
+  "file": "trees.txt",
+  "inset": 9332,
+  "base": 39616
+ },
+ "relief": "relief.webp",
+ "overlays": "overlays.json"
+}

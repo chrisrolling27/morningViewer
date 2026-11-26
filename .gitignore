@@ -1,0 +1,9 @@
+# raw downloads (large, and the county parcel files include owner names): rebuild with scripts/fetch_data.py
+data/_raw/
+# leftovers no longer used by the page
+data/area-3/*.bin
+data/area-3/inset8k-aerialbase-*
+build.log
+.DS_Store
+.vercel/
+__pycache__/

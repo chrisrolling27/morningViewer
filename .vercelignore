@@ -1,0 +1,8 @@
+data/_raw/
+samples/
+scripts/
+HANDOFF.md
+.DS_Store
+data/area-3/*.bin
+*.command
+data/area-3/inset8k-aerialbase-*

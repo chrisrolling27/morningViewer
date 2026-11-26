@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Morning Viewer</title>
+<link rel="artifact-thumbnail" href="thumb.jpg">
+<!--
+  Morning Viewer: a 3D, interactive map of the family farm in Morning View, Kentucky, built only from free public data.
+  Everything it shows is bundled in data/area-3/ (made by scripts/fetch_data.py, then scripts/build_data.py),
+  so the page never depends on the source servers. The only outside request is three.js from jsDelivr.
+
+  Four views
+  - Today:   the newest aerial photo (county, 2026) on the bare-earth lidar, plus 3D trees and buildings.
+  - Topo:    colour by height, hill shading and 10 ft contour lines, drawn in the browser from the bare-earth lidar.
+  - Slope:   colour by steepness (flat to over 30 degrees), same source.
+  - History: one timeline of every photo year from 1962 to 2026, without today's trees and buildings
+             (they would not match old photos). Trees are a layer you can switch off in the other views.
+
+  Data
+  - Elevation: KyFromAbove 2 ft lidar. Bare earth = ground with trees and buildings removed; first return = the
+    first thing the laser hit (treetops, roofs). Tree height = first return minus ground. The 3-mile square uses a
+    1024 x 1024 grid (~4.7 m apart); the 1-mile square around the house is a second grid (~1.2 m apart) laid into
+    the middle, with close-up photos (~0.4 m per pixel; the 3-inch 2022-24 flight at ~0.2 m on desktops).
+  - Photos: county (LINK-GIS) 1962, 1973, 1989, 2023, 2025, 2026; USGS 1990s; USDA NAIP summers 2004-2022;
+    Northern Kentucky 2007; USGS 2009; KyFromAbove 2012, 2019-22, 2022-24.
+  - Layers: county parcels (shapes only), buildings and roads (LINK-GIS); creeks and ponds (USGS NHD);
+    flood zones (FEMA NFHL); wetlands (US Fish & Wildlife NWI); soils (USDA SSURGO);
+    driveways (OpenStreetMap).
+  - Trees: one small 3D tree per treetop found in the lidar (the highest point within ~6 m around the farm,
+    ~14 m elsewhere; none on building roofs), sized by its measured height.
+
+  How the 3D works (three.js)
+  - All layers are in Web Mercator (EPSG:3857), so they line up exactly. World units are ground metres,
+    x = east, z = south, y = up, with the house at (0, 0). The ground is drawn at 2x its real relief so the
+    hills read from above. Tree heights from the lidar are used for building heights and the tap readout only.
+  - The 3-mile surface cuts a hole where the farm close-up sits (a tiny shader "discard").
+  - The map is wrapped over the surface as a texture; the layers are drawn onto a second, transparent texture.
+
+  Open locally: `python3 -m http.server 8000` in this folder, then http://localhost:8000
+  (double-clicking the file won't work: browsers block reading data/ from a file:// page).
+-->
+<style>
+:root{--ink:#f3efe4;--mute:#a8a493;--panel:rgba(17,22,19,.88);--line:rgba(255,255,255,.13);--acc:#e9b44c}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:#0e1311;color:var(--ink);font:14px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;overflow:hidden}
+#c{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none}
+#panel{position:fixed;left:10px;top:10px;width:290px;max-height:calc(100% - 20px);overflow:auto;background:var(--panel);backdrop-filter:blur(8px);border:1px solid var(--line);border-radius:12px;padding:12px 13px;z-index:5}
+#panel.min .body{display:none}
+h1{font-size:16px;margin:0;display:flex;justify-content:space-between;align-items:center;gap:8px}
+h1 button{background:none;border:0;color:var(--mute);font-size:20px;cursor:pointer;padding:0 6px;min-width:32px;min-height:32px}
+.sub{color:var(--mute);font-size:12px;margin:2px 0 4px}
+.grp{margin-top:12px}
+.lab{font-size:12px;color:var(--mute);margin-bottom:5px;display:flex;justify-content:space-between;gap:8px}
+.seg{display:flex;gap:4px}
+.seg button,.pbtn{flex:1 1 0;background:transparent;color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:8px 4px;font:inherit;font-size:13px;cursor:pointer;min-height:38px}
+.seg button.on{background:var(--acc);color:#1d1606;border-color:var(--acc);font-weight:600}
+.seg button:hover:not(.on){border-color:var(--mute)}
+.pbtn{flex:0 0 44px;font-size:15px}.pbtn.on{background:var(--acc);color:#1d1606}
+input[type=range]{width:100%;accent-color:var(--acc)}
+.row{display:flex;gap:8px;align-items:center}
+#timeline{display:none}
+#yearNote{font-size:11px;color:var(--mute);margin-top:4px;min-height:15px}
+.ticks{display:grid;grid-template-columns:1fr 1fr;gap:4px 8px}
+label.tick{font-size:13px;display:flex;gap:6px;align-items:center;cursor:pointer;min-height:26px}
+label.tick i{display:inline-block;width:10px;height:10px;border-radius:2px;flex:none}
+#status{position:fixed;right:10px;bottom:10px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:5px 10px;font-size:12px;color:var(--mute);z-index:5}
+#yearBig{position:fixed;right:16px;top:8px;font-size:42px;font-weight:800;letter-spacing:-.02em;text-shadow:0 2px 14px #000;pointer-events:none;z-index:4}
+#legend{display:none;grid-template-columns:1fr 1fr;gap:3px 8px;font-size:11px;margin-top:10px}
+#legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+#readout{font-size:12px;margin-top:10px;min-height:16px;color:var(--acc);line-height:1.5}
+#readout b{color:var(--ink);font-weight:600}
+.hint{font-size:11px;color:var(--mute);margin-top:8px}
+#compass{position:fixed;right:14px;bottom:44px;width:48px;height:48px;border-radius:50%;background:var(--panel);border:1px solid var(--line);padding:3px;cursor:pointer;z-index:5}
+#needle{display:block}
+#tap{position:fixed;z-index:3;pointer-events:none;width:0;height:0;display:none}
+#tap i{position:absolute;left:-7px;top:-7px;width:14px;height:14px;border-radius:50%;background:var(--acc);border:2px solid #fff;box-shadow:0 1px 6px rgba(0,0,0,.6)}
+#tap b{position:absolute;left:-16px;top:-16px;width:32px;height:32px;border-radius:50%;border:2px solid var(--acc);animation:ping 1.6s ease-out infinite}
+@keyframes ping{from{transform:scale(.4);opacity:.9}to{transform:scale(1.5);opacity:0}}
+@media(prefers-reduced-motion:reduce){#tap b{animation:none;opacity:.6}}
+.turn{position:fixed;bottom:50px;width:38px;height:38px;border-radius:50%;background:var(--panel);border:1px solid var(--line);color:var(--ink);font-size:19px;line-height:1;cursor:pointer;z-index:5;touch-action:none;user-select:none}
+#turnL{right:116px}#turnR{right:72px}
+@media(max-width:600px){#panel{width:calc(100% - 20px);max-height:50%}#yearBig{font-size:30px;top:auto;bottom:96px;right:16px}}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="panel">
+  <h1>Morning Viewer <button id="min" title="Hide controls">–</button></h1>
+  <div class="body">
+    <div class="sub" id="sub">Loading…</div>
+    <div class="grp"><div class="seg" id="view"><button data-v="today">Today</button><button data-v="topo">Topo</button><button data-v="slope">Slope</button><button data-v="history">History</button></div></div>
+    <div class="grp" id="timeline">
+      <div class="lab"><span>Back in time</span><span id="yearLab"></span></div>
+      <div class="row"><button id="play" class="pbtn" title="Play from oldest to newest">▶</button><input type="range" id="year" min="0" max="0" step="1" value="0" aria-label="Photo year"></div>
+      <div id="yearNote"></div>
+    </div>
+    <div id="legend"></div>
+    <div class="grp"><div class="lab">Layers</div><div class="ticks" id="layers"></div></div>
+    <div class="grp"><div class="seg" id="goto"><button data-v="farm">The farm</button><button data-v="all">Whole 3 miles</button><button data-v="spin" title="Slowly circle around (tap again to stop)">Spin 360°</button></div></div>
+    <div id="creeks" class="hint"></div>
+    <div id="readout"></div>
+    <div class="hint">Drag to move · scroll or pinch to zoom · to turn: two-finger swipe sideways, shift-drag, ⟲ ⟳, or ← → keys (↑ ↓ tilt) · tap the land for elevation, soil, flood zone and parcel size.</div>
+  </div>
+</div>
+<div id="yearBig"></div>
+<div id="tap"><b></b><i></i></div>
+<button id="compass" title="Madison Pike is up · tap for north up" aria-label="Compass: switch between Madison Pike up and north up"><svg id="needle" viewBox="0 0 40 40" width="40" height="40"><path d="M20 4 L26 21 L20 18 L14 21 Z" fill="#d8342b"/><path d="M20 36 L14 19 L20 22 L26 19 Z" fill="#f3efe4"/><text x="20" y="13.5" text-anchor="middle" font-size="7" font-weight="700" fill="#fff">N</text></svg></button>
+<button class="turn" id="turnL" title="Turn left (or ← key; hold to keep turning)" aria-label="Turn view left">⟲</button>
+<button class="turn" id="turnR" title="Turn right (or → key; hold to keep turning)" aria-label="Turn view right">⟳</button>
+<div id="status">Starting…</div>
+
+<script>if(matchMedia('(max-width:600px)').matches){document.getElementById('panel').classList.add('min');document.getElementById('min').textContent='+';}</script>
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.170.0/+esm';
+import {MapControls} from 'https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/controls/MapControls.js/+esm';
+
+const $=id=>document.getElementById(id), status=m=>{$('status').textContent=m;};
+const LOCAL='data/area-3/';
+
+// ---- Where and how big (scripts/fetch_data.py reads FARM and the layer lists below) ------------------
+const FARM={lat:38.878617,lon:-84.535389};             // Census geocode of the address
+const AREA=3;                                          // miles per side
+// Web Mercator: x = R·lon, y = R·ln(tan(45° + lat/2)). Mercator stretches distances by 1/cos(lat),
+// so a square of S ground metres is S/cos(lat) Mercator metres wide. Ground metres = Mercator metres × cosL.
+const R=6378137,cosL=Math.cos(FARM.lat*Math.PI/180),CX=R*FARM.lon*Math.PI/180,CY=R*Math.log(Math.tan(Math.PI/4+FARM.lat*Math.PI/360));
+const S=AREA*1609.34,HM=S/2/cosL;
+const FT=0.3048, EX=2, SUN=225; // ground drawn at 2x relief; afternoon sun from the SW
+const ROAD=3.7; // compass bearing of Madison Pike past the house (from the county road centerline): the map opens with it running up the screen
+
+// Photo layers the download script fetches (it reads these three lines; keep their shape)
+const mk=(list,size,nearest)=>({list:list.map(([s,y])=>({svc:'ImageServices/'+s,year:y})),size,nearest});
+const SERIES={
+  summer:mk([['Ky_NAIP_2004_1M','2004'],['Ky_NAIP_2006_2FT','2006'],['Ky_NAIP_2008_1M','2008'],['Ky_NAIP_2010_1M','2010'],['Ky_NAIP_2012_1M','2012'],['Ky_NAIP_2014_1M','2014'],['Ky_NAIP_2016_2FT','2016'],['Ky_NAIP_2018_2FT','2018'],['Ky_NAIP_2020_2FT','2020'],['Ky_NAIP_2022_2FT','2022']],2048),
+  hires:mk([['Ky_DOQ_BW_PHASE1_1M','1990s'],['Ky_NKAPC_2007_6IN','2007'],['Ky_NKY_USGS_2009_1FT','2009'],['Ky_KYAPED_NKY_2012_6IN','2012'],['Ky_KYAPED_Phase2_6IN','2019–22'],['Ky_KYAPED_Phase3_3IN','2022–24']],4096),
+  nlcd:mk([['KY_NLCD_1992_30M','1992'],['Ky_NLCD_2001_30M','2001'],['Ky_NLCD_2006_30M','2006'],['Ky_NLCD_2011_30M','2011'],['Ky_NLCD_2016_30M','2016'],['Ky_NLCD_2019_30M','2019'],['Ky_NLCD_2021_30M','2021']],512,true)};
+// Northern Kentucky county aerials (LINK-GIS)
+const COUNTY=[['Archive_Aerials/ArchiveAerial_1962','1962'],['Archive_Aerials/ArchiveAerial_1973','1973'],['Archive_Aerials/ArchiveAerial_1989','1989'],
+  ['Basemaps/AerialBase_2023','2023'],['Basemaps/AerialBase_2025_HighScale_CC_KC_PC','2025'],['Basemaps/AerialBase_2026_HighScale_CC_KC','2026']];
+const TODAY='linkgis:Basemaps/AerialBase_2026_HighScale_CC_KC'; // the main view's photo: the newest
+// One timeline, one photo per year: where two flights share a year, the sharper one wins (listed first)
+const NOTE={'linkgis:Archive_Aerials/ArchiveAerial_1962':'County archive · black & white','linkgis:Archive_Aerials/ArchiveAerial_1973':'County archive · black & white',
+  'linkgis:Archive_Aerials/ArchiveAerial_1989':'County archive · black & white','ImageServices/Ky_DOQ_BW_PHASE1_1M':'USGS · black & white',
+  'ImageServices/Ky_NKAPC_2007_6IN':'Northern Kentucky planning · 6-inch','ImageServices/Ky_NKY_USGS_2009_1FT':'USGS · 1 ft',
+  'ImageServices/Ky_KYAPED_NKY_2012_6IN':'KyFromAbove · 6-inch','ImageServices/Ky_KYAPED_Phase2_6IN':'KyFromAbove · 6-inch',
+  'ImageServices/Ky_KYAPED_Phase3_3IN':'KyFromAbove · 3-inch · leaf-off','linkgis:Basemaps/AerialBase_2023':'County aerial',
+  'linkgis:Basemaps/AerialBase_2025_HighScale_CC_KC_PC':'County aerial','linkgis:Basemaps/AerialBase_2026_HighScale_CC_KC':'County aerial · newest'};
+const yk=y=>({'1990s':1995,'2019–22':2020.5,'2022–24':2022.5})[y]||parseFloat(y);
+let HIST=[]; // filled from the manifest: [{svc, year, note}], oldest first
+const SLOPE_KEY=[['#bedc8c','Flat, under 5°'],['#f0d65a','Gentle, 5–10°'],['#f0a53c','Moderate, 10–15°'],['#e06a2c','Steep, 15–20°'],['#b3262a','Very steep, 20–30°'],['#5a1236','Over 30°']];
+const LAYERS=[['trees','Trees','#3e6b2c',true],['roads','Roads','#ffffff',true],['water','Creeks & ponds','#3f93dc',true],['parcels','Property lines','#ffd84a',false],
+  ['flood','Floodplain','#2f8cff',false],['soils','Soils','#c9a15a',false]];
+
+const st={view:'today',h:0,play:false,lay:Object.fromEntries(LAYERS.map(l=>[l[0],l[3]]))};
+
+// ---- Loading bundled files (fetch + blob URLs, so it also works where only same-origin requests are allowed) ----
+let M=null;
+async function getFile(f,how){const r=await fetch(LOCAL+f);if(!r.ok)throw new Error(f+' '+r.status);return how==='json'?r.json():how==='blob'?r.blob():r;}
+async function img(f){const im=new Image();im.src=URL.createObjectURL(await getFile(f,'blob'));await im.decode();return im;}
+async function gunzip(f){ // grids are gzip, stored as base64 text so any static host will serve them
+  const b=Uint8Array.from(atob((await (await getFile(f)).text()).trim()),c=>c.charCodeAt(0));
+  return new Response(new Blob([b]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();}
+async function grid(d,c){ // dem: 16-bit steps above a base height, each stored as the change from the previous value; canopy: 8-bit tree/roof heights
+  const n=d.n*d.n,q=new Uint16Array(await gunzip(d.file)),k=new Uint8Array(await gunzip(c.file));
+  if(q.length!==n||k.length!==n)throw new Error('elevation file is the wrong size');
+  const dem=new Float32Array(n),can=new Float32Array(n);
+  for(let i=0,a=0;i<n;i++){a=(a+q[i])&65535;dem[i]=d.base+a*d.step;can[i]=k[i]*c.step;}return {n:d.n,dem,can};}
+function halve(g){const n=Math.ceil(g.n/2),dem=new Float32Array(n*n),can=new Float32Array(n*n);
+  for(let r=0;r<n;r++)for(let c=0;c<n;c++){const s=Math.min(g.n-1,r*2)*g.n+Math.min(g.n-1,c*2);dem[r*n+c]=g.dem[s];can[r*n+c]=g.can[s];}return {n,dem,can};}
+
+// ---- Renderer, scene, light ---------------------------------------------------------
+const ren=new THREE.WebGLRenderer({canvas:$('c'),antialias:true});
+ren.setPixelRatio(Math.min(devicePixelRatio,2));ren.setSize(innerWidth,innerHeight,false);
+ren.toneMapping=THREE.ACESFilmicToneMapping;ren.outputColorSpace=THREE.SRGBColorSpace;
+ren.shadowMap.enabled=true;ren.shadowMap.type=THREE.PCFSoftShadowMap;ren.shadowMap.autoUpdate=false; // shadows redrawn only when the surface changes
+const ANI=ren.capabilities.getMaxAnisotropy();
+const scene=new THREE.Scene(),BG=new THREE.Color('#0e1311');scene.background=BG;scene.fog=new THREE.Fog(BG,S*2.2,S*6);
+scene.add(new THREE.HemisphereLight('#d2e2ff','#5a4632',0.85));
+const sun=new THREE.DirectionalLight('#fff0d4',2.6);sun.castShadow=true;sun.shadow.mapSize.set(4096,4096);
+Object.assign(sun.shadow.camera,{left:-S*.75,right:S*.75,top:S*.75,bottom:-S*.75,near:10,far:S*4});sun.shadow.normalBias=2;scene.add(sun,sun.target);
+{const a=SUN*Math.PI/180,e=32*Math.PI/180,D=S*1.5;sun.position.set(Math.sin(a)*Math.cos(e)*D,Math.sin(e)*D,-Math.cos(a)*Math.cos(e)*D);}
+
+// ---- Terrain: a 3-mile grid with a hole in the middle, and a fine 1-mile grid filling it -------------
+const hole={value:new THREE.Vector4(0,0,0,0)}; // x0, z0, x1, z1 of the farm close-up, in world metres
+function cutHole(m){m.onBeforeCompile=sh=>{sh.uniforms.hole=hole;
+  sh.vertexShader='varying vec3 vW;\n'+sh.vertexShader.replace('#include <project_vertex>','#include <project_vertex>\nvW=(modelMatrix*vec4(transformed,1.)).xyz;');
+  sh.fragmentShader='uniform vec4 hole;varying vec3 vW;\n'+sh.fragmentShader.replace('void main() {','void main() {\nif(vW.x>hole.x&&vW.x<hole.z&&vW.z>hole.y&&vW.z<hole.w)discard;');};return m;}
+const overMat=()=>new THREE.MeshBasicMaterial({transparent:true,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-4,polygonOffsetUnits:-4});
+function makeGrid(n,size,cx,cz){ // PlaneGeometry n×n, centred at (cx,cz); UVs in 3-mile-texture space
+  const g=new THREE.PlaneGeometry(size,size,n-1,n-1);g.rotateX(-Math.PI/2);g.translate(cx,0,cz);
+  const p=g.attributes.position.array,uv=g.attributes.uv.array;
+  for(let i=0;i<n*n;i++){uv[i*2]=(p[i*3]+S/2)/S;uv[i*2+1]=1-(p[i*3+2]+S/2)/S;}return g;}
+function makeSkirt(geo,n,drop,color){ // brown walls hanging from the grid's edge
+  const e=[];for(let c=0;c<n;c++)e.push(c);for(let r=1;r<n;r++)e.push(r*n+n-1);for(let c=n-2;c>=0;c--)e.push((n-1)*n+c);for(let r=n-2;r>=0;r--)e.push(r*n);
+  const sp=new Float32Array(e.length*6),sg=new THREE.BufferGeometry();sg.setAttribute('position',new THREE.BufferAttribute(sp,3));
+  const si=[];for(let k=0;k<e.length-1;k++){const a=2*k;si.push(a,a+1,a+2,a+2,a+1,a+3);}sg.setIndex(si);
+  const mesh=new THREE.Mesh(sg,new THREE.MeshStandardMaterial({color,roughness:1,side:THREE.DoubleSide}));
+  const P=geo.attributes.position.array;
+  mesh.update=()=>{e.forEach((v,j)=>{sp[j*6]=sp[j*6+3]=P[v*3];sp[j*6+1]=P[v*3+1];sp[j*6+4]=drop(P[v*3+1]);sp[j*6+2]=sp[j*6+5]=P[v*3+2];});sg.attributes.position.needsUpdate=true;sg.computeVertexNormals();};
+  return mesh;}
+
+const T={}; // T.base, T.inset: {n, dem, can, geo, mat, land, over, skirt}
+let zmin=0,zmax=0;const pinPos=new THREE.Vector3();
+function buildTerrain(){
+  const ib=M.inset.bbox,ix0=(ib[0]-CX)*cosL,ix1=(ib[2]-CX)*cosL,iz0=-(ib[3]-CY)*cosL,iz1=-(ib[1]-CY)*cosL;
+  hole.value.set(ix0,iz0,ix1,iz1);
+  for(const [k,g] of Object.entries(T)){
+    const isBase=k==='base';
+    g.geo=isBase?makeGrid(g.n,S,0,0):makeGrid(g.n,ix1-ix0,(ix0+ix1)/2,(iz0+iz1)/2);
+    g.mat=new THREE.MeshStandardMaterial({roughness:.95,metalness:0});g.overMat=overMat();
+    if(isBase){cutHole(g.mat);cutHole(g.overMat);}
+    g.land=new THREE.Mesh(g.geo,g.mat);g.land.castShadow=g.land.receiveShadow=true;
+    if(isBase){const dm=new THREE.MeshDepthMaterial({depthPacking:THREE.RGBADepthPacking});cutHole(dm);g.land.customDepthMaterial=dm;}
+    g.over=new THREE.Mesh(g.geo,g.overMat);g.over.renderOrder=2;g.over.visible=false;
+    g.skirt=makeSkirt(g.geo,g.n,isBase?()=>-S/80:y=>y-8,isBase?0x4a3626:0x3b2b1f);
+    scene.add(g.land,g.over,g.skirt);}
+  T.inset.uv={u0:(ix0+S/2)/S,v0:1-(iz1+S/2)/S,us:(ix1-ix0)/S}; // where the close-up sits inside the 3-mile texture
+}
+function heights(){ // lift every grid point by its bare-earth height (2x relief); runs once at start
+  for(const g of Object.values(T)){const P=g.geo.attributes.position.array;
+    for(let i=0;i<g.n*g.n;i++)P[i*3+1]=(g.dem[i]-zmin)*EX*FT;
+    g.geo.attributes.position.needsUpdate=true;g.geo.computeVertexNormals();g.geo.computeBoundingSphere();g.skirt.update();}
+  const g=T.inset,P=g.geo.attributes.position.array,c=(g.n>>1)*g.n+(g.n>>1);pinPos.set(0,P[c*3+1],0);ren.shadowMap.needsUpdate=true;}
+function hAt(x,z){ // surface height under (x, z), from the close-up where it covers, else the 3-mile grid
+  const h=hole.value,inIn=x>h.x&&x<h.z&&z>h.y&&z<h.w,g=inIn?T.inset:T.base,x0=inIn?h.x:-S/2,z0=inIn?h.y:-S/2,sz=inIn?h.z-h.x:S;
+  const fx=(x-x0)/sz*(g.n-1),fz=(z-z0)/sz*(g.n-1);if(fx<0||fz<0||fx>g.n-1||fz>g.n-1)return null;
+  const P=g.geo.attributes.position.array,a=Math.floor(fx),b=Math.floor(fz),a1=Math.min(g.n-1,a+1),b1=Math.min(g.n-1,b+1),tx=fx-a,tz=fz-b,y=(r,c)=>P[(r*g.n+c)*3+1];
+  return {h:(y(b,a)*(1-tx)+y(b,a1)*tx)*(1-tz)+(y(b1,a)*(1-tx)+y(b1,a1)*tx)*tz,g,k:Math.round(fz)*g.n+Math.round(fx)};}
+
+// ---- Camera and controls (free 3D only) --------------------------------------------------------
+const cam=new THREE.PerspectiveCamera(35,innerWidth/innerHeight,2,S*12);
+const place=(c,tgt,az,el,d)=>{const a=az*Math.PI/180,e=el*Math.PI/180;c.position.set(tgt.x+Math.sin(a)*Math.cos(e)*d,tgt.y+Math.sin(e)*d,tgt.z-Math.cos(a)*Math.cos(e)*d);c.lookAt(tgt);}; // az = compass bearing from target
+place(cam,new THREE.Vector3(),ROAD+180,38,2300);
+const controls=new MapControls(cam,ren.domElement);
+Object.assign(controls,{enableDamping:true,dampingFactor:.08,minDistance:20,maxDistance:S*4,zoomToCursor:true,maxPolarAngle:Math.PI*.47,autoRotateSpeed:.6});controls.update();
+const heading=()=>{const t=controls.target,p=cam.position;return (Math.atan2(t.x-p.x,-(t.z-p.z))*180/Math.PI+360)%360;}; // compass direction the view faces
+function face(h){const t=controls.target,off=cam.position.clone().sub(t),d=off.length();place(cam,t,h+180,Math.asin(off.y/d)*180/Math.PI,d);controls.update();}
+const sph=new THREE.Spherical(),off=new THREE.Vector3();
+function orbit(dAz,dEl){ // turn the view around what you're looking at (degrees); positive dAz turns the view right
+  off.copy(cam.position).sub(controls.target);sph.setFromVector3(off);
+  sph.theta-=dAz*Math.PI/180;sph.phi=Math.min(Math.PI*.47,Math.max(.12,sph.phi-dEl*Math.PI/180));
+  cam.position.copy(controls.target).add(off.setFromSpherical(sph));cam.lookAt(controls.target);controls.update();}
+function goTo(far){controls.target.set(0,far?0:pinPos.y,0);place(cam,controls.target,ROAD+180,far?40:38,far?S*1.5:2300);controls.update();}
+
+// ---- Map textures (a few kept in memory; big ones are dropped when not shown) ----------------
+const cache=new Map(),shown={base:null,inset:null};
+// desktops with room for an 8192 px texture get the extra-sharp farm photo (~0.2 m per pixel); phones get 4096 (~0.4 m)
+const BIG=ren.capabilities.maxTextureSize>=8192&&!matchMedia('(pointer:coarse)').matches;
+function tex(src){const t=src instanceof HTMLCanvasElement?new THREE.CanvasTexture(src):new THREE.Texture(src);t.colorSpace=THREE.SRGBColorSpace;t.anisotropy=ANI;t.needsUpdate=true;return t;}
+function remember(k,v){cache.set(k,v);const keep=new Set([k,'topo','slope',TODAY,shown.base,shown.inset].filter(Boolean));
+  for(const [ck,cv] of [...cache]){if(cache.size<=(BIG?3:5))break;if(!keep.has(ck)&&!keep.has(cv.base)&&!keep.has(cv.inset)){cv.base&&cv.base.dispose();cv.inset&&cv.inset.dispose();cache.delete(ck);}}}
+async function photoTex(svc){if(cache.has(svc))return cache.get(svc);
+  const f=M.layers[svc],f8=BIG&&M.inset.layers8k&&M.inset.layers8k[svc],fi=f8||(M.inset.layers&&M.inset.layers[svc]);
+  const [a,b]=await Promise.all([img(f),fi?img(fi):null]);
+  const v={base:tex(a),inset:b?tex(b):null};remember(svc,v);return v;}
+const RAMP_TOPO=[[0,[46,96,64]],[.35,[120,160,90]],[.6,[214,200,140]],[.85,[190,140,90]],[1,[245,240,230]]];
+const RAMP_SLOPE=[[0,[226,236,206]],[5,[190,220,140]],[10,[240,214,90]],[15,[240,165,60]],[20,[224,106,44]],[30,[179,38,42]],[45,[90,18,54]]];
+const ramp=(R,t)=>{if(t<=R[0][0])return R[0][1];for(let j=1;j<R.length;j++)if(t<=R[j][0]){const a=R[j-1],b=R[j],u=(t-a[0])/(b[0]-a[0]);return [0,1,2].map(i=>a[1][i]+(b[1][i]-a[1][i])*u);}return R[R.length-1][1];};
+function paintGrid(gr,W,ground,mode){ // topo: colour by height + shading + 10 ft contours; slope: colour by steepness + shading
+  const n=gr.n,dem=gr.dem,z=new Float32Array(W*W),k=(n-1)/(W-1);
+  for(let y=0;y<W;y++){const fy=y*k,y0=fy|0,y1=Math.min(n-1,y0+1),ty=fy-y0;for(let x=0;x<W;x++){const fx=x*k,x0=fx|0,x1=Math.min(n-1,x0+1),tx=fx-x0;
+    z[y*W+x]=(dem[y0*n+x0]*(1-tx)+dem[y0*n+x1]*tx)*(1-ty)+(dem[y1*n+x0]*(1-tx)+dem[y1*n+x1]*tx)*ty;}}
+  const c=document.createElement('canvas');c.width=c.height=W;const g=c.getContext('2d'),id=g.createImageData(W,W),d=id.data,cell=ground/W/FT,CI=10,MJ=CI*5;
+  for(let y=0;y<W;y++)for(let x=0;x<W;x++){const i=y*W+x,v=z[i],xr=x<W-1?i+1:i,xl=x>0?i-1:i,yd=y<W-1?i+W:i,yu=y>0?i-W:i;
+    const dx=(z[xr]-z[xl])/((xr-xl)*cell||1),dy=(z[yd]-z[yu])/(((yd-yu)/W)*cell||1);
+    let rgb,m;
+    if(mode==='topo'){const n2=Math.hypot(dx*2.5,dy*2.5,1);m=.3+.85*Math.max(0,(dx*2.5*.5+dy*2.5*.5+.707)/n2);rgb=ramp(RAMP_TOPO,(v-zmin)/(zmax-zmin));
+      if(Math.floor(z[xr]/CI)!==Math.floor(v/CI)||Math.floor(z[yd]/CI)!==Math.floor(v/CI))
+        m*=(Math.floor(z[xr]/MJ)!==Math.floor(v/MJ)||Math.floor(z[yd]/MJ)!==Math.floor(v/MJ))?.35:.62;}
+    else{const n2=Math.hypot(dx*1.5,dy*1.5,1);m=.55+.5*Math.max(0,(dx*1.5*.5+dy*1.5*.5+.707)/n2);rgb=ramp(RAMP_SLOPE,Math.atan(Math.hypot(dx,dy))*180/Math.PI);}
+    d[i*4]=rgb[0]*m;d[i*4+1]=rgb[1]*m;d[i*4+2]=rgb[2]*m;d[i*4+3]=255;}
+  g.putImageData(id,0,0);return c;}
+async function terrainTex(mode){ // drawn in the browser from the lidar: the 3-mile grid, plus a crisp version of the farm close-up
+  if(cache.has(mode))return cache.get(mode);status(mode==='topo'?'Drawing contour lines…':'Working out slopes…');await new Promise(r=>setTimeout(r,40));
+  const v={base:tex(paintGrid(T.base,2048,S,mode)),inset:tex(paintGrid(T.inset,2048,hole.value.z-hole.value.x,mode))};cache.set(mode,v);return v;}
+function showTex(v){ // the 3-mile texture on both grids; a sharper close-up texture on the inner grid when there is one
+  const u=T.inset.uv;shown.base=v.base;shown.inset=v.inset||null;
+  T.base.mat.map=v.base;T.base.mat.needsUpdate=true;
+  let ti=v.base;if(v.inset){ti=v.inset;ti.repeat.set(1/u.us,1/u.us);ti.offset.set(-u.u0/u.us,-u.v0/u.us);}
+  T.inset.mat.map=ti;T.inset.mat.needsUpdate=true;}
+
+// ---- Layers: roads, water, property lines, driveways, flood, wetlands, soils, drawn onto see-through textures --------
+let OV=null;
+const soilCol=s=>{let h=0;for(const ch of s)h=(h*31+ch.charCodeAt(0))>>>0;return 'hsla('+(h%360)+',55%,55%,';};
+function drawLayers(c,box){ // box = [x0, y0, x1, y1] in Mercator metres from the house
+  const W=c.width,g=c.getContext('2d'),sx=W/(box[2]-box[0]),m=sx/cosL; // m: canvas pixels per ground metre
+  const px=x=>(x-box[0])*sx,py=y=>(box[3]-y)*sx;g.clearRect(0,0,W,W);g.lineCap=g.lineJoin='round';
+  const path=f=>{g.moveTo(px(f[0]),py(f[1]));for(let i=2;i<f.length;i+=2)g.lineTo(px(f[i]),py(f[i+1]));};
+  const fill=(rings,style)=>{g.fillStyle=style;g.beginPath();rings.forEach(r=>{path(r);g.closePath();});g.fill('evenodd');};
+  const stroke=(lines,style,w,close)=>{g.strokeStyle=style;g.lineWidth=w;g.beginPath();lines.forEach(l=>{path(l);if(close)g.closePath();});g.stroke();};
+  const L=st.lay;
+  if(L.soils)for(const s of OV.soils){const c0=soilCol(s.s||s.n);fill(s.r,c0+'.38)');stroke(s.r,c0+'.9)',Math.max(1,1.2*m),true);}
+  if(L.flood)for(const f of OV.flood){if(!/^A/.test(f.z)&&!/0\.2/.test(f.s))continue;fill(f.r,/^A/.test(f.z)?'rgba(47,140,255,.42)':'rgba(140,190,255,.28)');}
+  if(L.water){fill(OV.ponds,'#3f93dc');for(const k of OV.creeks)stroke([k.c],'#3f93dc',Math.max(2,(k.n?9:5)*m));}
+  if(OV.tracks){g.setLineDash([Math.max(4,6*m),Math.max(3,4*m)]);stroke(OV.tracks.map(t=>t.c),'#d9b98a',Math.max(1.5,3*m));g.setLineDash([]);}
+  if(L.parcels)stroke(OV.parcels,'#ffd84a',Math.max(1.5,1.6*m),true);
+  if(L.roads){stroke(OV.roads.map(r=>r.c),'rgba(20,20,20,.75)',Math.max(3,10*m));stroke(OV.roads.map(r=>r.c),'#f4f1ea',Math.max(1.5,6*m));}
+  const size=sx>.6?26:30; // label size in canvas pixels (the close-up canvas has ~3x the detail)
+  if(L.water)label(OV.creeks,'#bfe3ff',size*.85);
+  if(L.roads)label(OV.roads,'#ffffff',size);
+  function label(items,color,size){ // write each name along the middle of its line, upright, once per stretch of road
+    g.font='600 '+size+'px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif';g.textAlign='center';g.textBaseline='middle';
+    const placed=[];
+    for(const it of items){if(!it.n)continue;const f=it.c,seg=[];let len=0;
+      for(let i=2;i<f.length;i+=2){const dd=Math.hypot(f[i]-f[i-2],f[i+1]-f[i-1]);seg.push(dd);len+=dd;}
+      const tw=g.measureText(it.n).width;if(!seg.length||len*sx<tw*1.3)continue;
+      let h=len/2,i=0;while(i<seg.length-1&&h>seg[i]){h-=seg[i];i++;}
+      const t=seg[i]?h/seg[i]:0,x0=f[i*2],y0=f[i*2+1],x1=f[i*2+2],y1=f[i*2+3],X=px(x0+(x1-x0)*t),Y=py(y0+(y1-y0)*t);
+      if(X<tw/2||Y<size||X>W-tw/2||Y>W-size)continue;
+      if(placed.some(p=>Math.hypot(p[0]-X,p[1]-Y)<(p[2]===it.n?W/3:size*2)))continue;placed.push([X,Y,it.n]);
+      let a=Math.atan2(py(y1)-py(y0),px(x1)-px(x0));if(a>Math.PI/2)a-=Math.PI;if(a<-Math.PI/2)a+=Math.PI;
+      g.save();g.translate(X,Y);g.rotate(a);g.lineWidth=size/3.5;g.strokeStyle='rgba(10,12,10,.8)';g.strokeText(it.n,0,0);g.fillStyle=color;g.fillText(it.n,0,0);g.restore();}}}
+let overC=null;
+function updateLayers(){
+  for(const g of Object.values(T))g.over.visible=!!OV;if(!OV)return; // driveways are always drawn, so the layer texture is always on
+  if(!overC){overC={base:document.createElement('canvas'),inset:document.createElement('canvas')};overC.base.width=overC.base.height=overC.inset.width=overC.inset.height=2048;}
+  const ib=M.inset.bbox;drawLayers(overC.base,[-HM,-HM,HM,HM]);drawLayers(overC.inset,[ib[0]-CX,ib[1]-CY,ib[2]-CX,ib[3]-CY]);
+  for(const [k,c] of Object.entries(overC)){const m=T[k].overMat;if(m.map)m.map.dispose();m.map=tex(c);
+    if(k==='inset'){const u=T.inset.uv;m.map.repeat.set(1/u.us,1/u.us);m.map.offset.set(-u.u0/u.us,-u.v0/u.us);}m.needsUpdate=true;}}
+$('layers').innerHTML=LAYERS.map(([k,n,c])=>'<label class="tick"><input type="checkbox" data-k="'+k+'"><i style="background:'+c+'"></i>'+n+'</label>').join('');
+$('layers').addEventListener('change',e=>{const k=e.target.dataset.k;if(!k)return;st.lay[k]=e.target.checked;
+  if(k==='trees'){trees.visible=st.lay.trees&&st.view!=='history';ren.shadowMap.needsUpdate=true;}else updateLayers();});
+
+// ---- 3D buildings: county footprints raised to the roof height the lidar measured, standing on the bare ground ----
+const houses=new THREE.Mesh(new THREE.BufferGeometry(),new THREE.MeshStandardMaterial({vertexColors:true,roughness:.85,metalness:0}));
+houses.castShadow=houses.receiveShadow=true;houses.visible=false;scene.add(houses);
+function gridAt(x,z){ // nearest lidar cell (close-up grid where it covers): {g, k}
+  const h=hole.value,inIn=x>h.x&&x<h.z&&z>h.y&&z<h.w,g=inIn?T.inset:T.base,x0=inIn?h.x:-S/2,z0=inIn?h.y:-S/2,sz=inIn?h.z-h.x:S;
+  const c=Math.round((x-x0)/sz*(g.n-1)),r=Math.round((z-z0)/sz*(g.n-1));if(c<0||r<0||c>=g.n||r>=g.n)return null;return {g,k:r*g.n+c};}
+function buildHouses(){
+  const pos=[],nor=[],col=[],WALL=[.91,.89,.85],ROOF=[.47,.38,.33],v=new THREE.Vector3(),u=new THREE.Vector3(),w=new THREE.Vector3();
+  const tri=(a,b,c,n,cl)=>{u.subVectors(b,a);w.subVectors(c,a);v.crossVectors(u,w);if(v.dot(n)<0){const t=b;b=c;c=t;} // keep faces turned outward
+    for(const p of [a,b,c]){pos.push(p.x,p.y,p.z);nor.push(n.x,n.y,n.z);col.push(...cl);}};
+  for(const f of OV.buildings){
+    const pts=[];for(let i=0;i<f.length;i+=2)pts.push([f[i]*cosL,-f[i+1]*cosL]);
+    if(pts.length>3&&Math.hypot(pts[0][0]-pts.at(-1)[0],pts[0][1]-pts.at(-1)[1])<.5)pts.pop();
+    if(pts.length<3)continue;
+    const cx=pts.reduce((a,p)=>a+p[0],0)/pts.length,cz=pts.reduce((a,p)=>a+p[1],0)/pts.length;
+    let gmin=Infinity,hs=[];
+    for(const [x,z] of pts){const s=gridAt(x,z);if(s)gmin=Math.min(gmin,s.g.dem[s.k]);}
+    for(const t of [0,.35,.6])for(const [x,z] of pts){const s=gridAt(cx+(x-cx)*t,cz+(z-cz)*t);if(s)hs.push(s.g.can[s.k]);}
+    if(!isFinite(gmin)||!hs.length)continue;
+    hs.sort((a,b)=>a-b);let h=hs[Math.floor(hs.length*.6)];if(!(h>=7))h=11;h=Math.min(h,40); // roof height in feet; 11 ft where the lidar predates the building
+    const y0=(gmin-zmin)*EX*FT-.5,y1=y0+.5+h*FT*1.2;
+    for(let i=0;i<pts.length;i++){const [ax,az]=pts[i],[bx,bz]=pts[(i+1)%pts.length];
+      const n=new THREE.Vector3(bz-az,0,-(bx-ax)).normalize();if(n.x*((ax+bx)/2-cx)+n.z*((az+bz)/2-cz)<0)n.negate();
+      const A=new THREE.Vector3(ax,y0,az),B=new THREE.Vector3(bx,y0,bz),C=new THREE.Vector3(bx,y1,bz),D=new THREE.Vector3(ax,y1,az);
+      tri(A,B,C,n,WALL);tri(A,C,D,n,WALL);}
+    const up=new THREE.Vector3(0,1,0),tris=THREE.ShapeUtils.triangulateShape(pts.map(p=>new THREE.Vector2(p[0],p[1])),[]);
+    for(const [a,b,c] of tris)tri(new THREE.Vector3(pts[a][0],y1,pts[a][1]),new THREE.Vector3(pts[b][0],y1,pts[b][1]),new THREE.Vector3(pts[c][0],y1,pts[c][1]),up,ROOF);}
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('normal',new THREE.Float32BufferAttribute(nor,3));g.setAttribute('color',new THREE.Float32BufferAttribute(col,3));
+  houses.geometry.dispose();houses.geometry=g;houses.visible=st.view!=='history';ren.shadowMap.needsUpdate=true;}
+
+// ---- 3D trees: one low-poly tree per lidar treetop (dense and detailed around the farm, coarser elsewhere) ----
+const trees=new THREE.Group();trees.visible=false;scene.add(trees);
+async function buildTrees(){
+  if(!M.trees)return;
+  const a=new Int16Array(await gunzip(M.trees.file)),n=a.length/3,nIn=M.trees.inset,phone=matchMedia('(pointer:coarse)').matches;
+  const groundY=(x,z)=>{const s=gridAt(x,z);return s?(s.g.dem[s.k]-zmin)*EX*FT:null;};
+  const rnd=(i,k)=>{const v=Math.sin(i*12.9898+k*78.233)*43758.5453;return v-Math.floor(v);}; // steady per-tree randomness
+  const make=(from,to,step,detail,rmin,rmax,rk,trunks)=>{
+    const idx=[];for(let i=from;i<to;i+=step)idx.push(i);if(!idx.length)return;
+    const crown=new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1,detail),new THREE.MeshStandardMaterial({roughness:.9,metalness:0,flatShading:true}),idx.length);
+    const trunk=trunks?new THREE.InstancedMesh(new THREE.CylinderGeometry(1,1.3,1,5),new THREE.MeshStandardMaterial({color:0x4a3828,roughness:1}),idx.length):null;
+    const m=new THREE.Matrix4(),q=new THREE.Quaternion(),p=new THREE.Vector3(),sc=new THREE.Vector3(),c=new THREE.Color(),up=new THREE.Vector3(0,1,0);let k=0;
+    for(const i of idx){const x=a[i*3]/10,z=a[i*3+1]/10,H=a[i*3+2]/10*FT*1.3,y=groundY(x,z);if(y===null)continue;
+      const r=Math.min(rmax,Math.max(rmin,H*rk))*(0.85+rnd(i,1)*.3),ch=H*(.62+rnd(i,2)*.12);
+      q.setFromAxisAngle(up,rnd(i,3)*6.28);p.set(x,y+H-ch/2,z);sc.set(r,ch/2,r*(0.85+rnd(i,4)*.3));crown.setMatrixAt(k,m.compose(p,q,sc));
+      c.setHSL(.21+rnd(i,5)*.09,.32+rnd(i,6)*.16,.13+rnd(i,7)*.08);crown.setColorAt(k,c);
+      if(trunk){const th=H-ch*.8;p.set(x,y+th/2,z);sc.set(.18+H*.006,th,.18+H*.006);trunk.setMatrixAt(k,m.compose(p,q,sc));}
+      k++;}
+    crown.count=k;crown.castShadow=true;crown.instanceMatrix.needsUpdate=true;crown.instanceColor.needsUpdate=true;trees.add(crown);
+    if(trunk){trunk.count=k;trunk.castShadow=true;trunk.instanceMatrix.needsUpdate=true;trees.add(trunk);}};
+  make(0,nIn,phone&&T.inset.n<1000?1:1,phone?0:1,1.6,6,.3,!phone);        // around the farm: every treetop, rounder crowns, trunks
+  make(nIn,n,phone?2:1,0,3.5,9,.42,false);                                // the rest: coarser trees, bigger crowns
+  trees.visible=st.lay.trees&&st.view!=='history';ren.shadowMap.needsUpdate=true;}
+
+// ---- Tap to read the land: walk along the view ray until it dips below the surface ----------
+const inRing=(f,x,y)=>{let c=false;for(let i=0,j=f.length-2;i<f.length;j=i,i+=2){const xi=f[i],yi=f[i+1],xj=f[j],yj=f[j+1];if((yi>y)!==(yj>y)&&x<(xj-xi)*(y-yi)/(yj-yi)+xi)c=!c;}return c;};
+const inRings=(rs,x,y)=>rs.reduce((c,r)=>inRing(r,x,y)?!c:c,false);
+const area=f=>{let a=0;for(let i=0,j=f.length-2;i<f.length;j=i,i+=2)a+=f[j]*f[i+1]-f[i]*f[j+1];return Math.abs(a/2)*cosL*cosL;};
+const esc=s=>String(s).replace(/[&<>"']/g,c=>'&#'+c.charCodeAt(0)+';');
+function describe(x,z){ // what's at this spot, from the layer data
+  if(!OV)return '';const mx=x/cosL,my=-z/cosL,out=[];
+  const s=OV.soils.find(s=>inRings(s.r,mx,my));
+  if(s)out.push('<b>Soil</b> '+esc(s.n)+(s.f?' · '+esc(s.f.toLowerCase()):'')+(s.d?' · '+esc(s.d.toLowerCase()):''));
+  const f=OV.flood.find(f=>inRings(f.r,mx,my));
+  if(f&&/^A/.test(f.z))out.push('<b>Flood</b> 100-year floodplain (zone '+esc(f.z)+')');else if(f&&/0\.2/.test(f.s))out.push('<b>Flood</b> 500-year floodplain');
+  const p=OV.parcels.find(r=>inRing(r,mx,my));if(p)out.push('<b>Parcel</b> about '+Math.round(area(p)/4046.86).toLocaleString()+' acres');
+  return out.join('<br>');}
+const rc=new THREE.Raycaster();
+const tapAt=new THREE.Vector3();let tapOn=false; // the tapped spot; drawn as an HTML pin in the frame loop
+let down=null;ren.domElement.addEventListener('pointerdown',e=>{down=[e.clientX,e.clientY];});
+ren.domElement.addEventListener('pointerup',e=>{if(!T.base||!T.base.geo||!down||e.button!==0||Math.hypot(e.clientX-down[0],e.clientY-down[1])>6)return;
+  rc.setFromCamera(new THREE.Vector2(e.clientX/innerWidth*2-1,-e.clientY/innerHeight*2+1),cam);const o=rc.ray.origin.clone(),d=rc.ray.direction,step=1.5;
+  for(let i=0;i<200000;i++){o.addScaledVector(d,step);const s=hAt(o.x,o.z);
+    if(s&&o.y<=s.h){const mi=Math.hypot(o.x,o.z)/1609.34,brg=(Math.atan2(o.x,-o.z)*180/Math.PI+360)%360,more=describe(o.x,o.z);
+      $('readout').innerHTML='<b>Ground</b> '+Math.round(s.g.dem[s.k])+' ft · trees/roof '+Math.round(s.g.can[s.k])+' ft · '+mi.toFixed(2)+' mi '+['N','NE','E','SE','S','SW','W','NW'][Math.round(brg/45)%8]+' of the house'+(more?'<br>'+more:'');
+      tapAt.set(o.x,s.h,o.z);tapOn=true;return;}
+    if(o.y<-S)break;}});
+addEventListener('resize',()=>{ren.setSize(innerWidth,innerHeight,false);cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix();});
+
+// ---- Views ---------------------------------------------------------------------------------------
+// Today: newest photo + 3D buildings. Topo / Slope: terrain colours + buildings. History: photos only (no buildings).
+let tok=0;
+async function applyView(){const my=++tok,v=st.view;status('Loading map…');
+  houses.visible=!!OV&&v!=='history';trees.visible=st.lay.trees&&v!=='history';ren.shadowMap.needsUpdate=true;sync();
+  try{const t=v==='today'?await photoTex(TODAY):v==='history'?await photoTex(HIST[st.h].svc):await terrainTex(v);if(my!==tok)return;
+    showTex(t);status('Ready');
+    if(v==='history'&&st.play)photoTex(HIST[(st.h+1)%HIST.length].svc).catch(()=>{}); // preload the next year
+  }catch(e){if(my===tok)status('Could not load that map: '+e.message);console.error(e);}}
+function sync(){
+  $('view').querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.v===st.view));
+  const hist=st.view==='history',e=HIST[st.h];$('timeline').style.display=hist?'block':'none';
+  $('year').max=Math.max(0,HIST.length-1);$('year').value=st.h;
+  $('yearLab').textContent=hist&&e?e.year:'';$('yearNote').textContent=hist&&e?e.note:'';$('yearBig').textContent=hist&&e?e.year:'';
+  $('play').classList.toggle('on',st.play);$('play').textContent=st.play?'❚❚':'▶';
+  $('legend').style.display=st.view==='slope'?'grid':'none';
+  $('layers').querySelectorAll('input').forEach(i=>{i.checked=!!st.lay[i.dataset.k];});}
+$('legend').innerHTML=SLOPE_KEY.map(([c,n])=>'<span><i style="background:'+c+'"></i>'+n+'</span>').join('');
+const seg=(id,fn)=>$(id).addEventListener('click',e=>{const b=e.target.closest('button');if(b)fn(b.dataset.v);});
+seg('view',v=>{if(v==='history'&&st.view!=='history'){st.h=HIST.length-1;}if(v!=='history')st.play=false;st.view=v;applyView();});
+seg('goto',v=>{if(v==='spin'){controls.autoRotate=!controls.autoRotate;$('goto').querySelector('[data-v=spin]').classList.toggle('on',controls.autoRotate);}else goTo(v==='all');});
+$('year').addEventListener('input',e=>{st.h=+e.target.value;st.play=false;applyView();});
+$('play').addEventListener('click',()=>{st.play=!st.play;if(st.play&&st.h===HIST.length-1)st.h=0;applyView();}); // play runs oldest to newest
+$('min').addEventListener('click',()=>{$('panel').classList.toggle('min');$('min').textContent=$('panel').classList.contains('min')?'+':'–';});
+// ---- Easier turning on a Mac: sideways trackpad swipe, arrow keys, hold-to-turn buttons, Safari's rotate gesture ----
+ren.domElement.addEventListener('wheel',e=>{ // a mouse wheel only scrolls up/down; a sideways two-finger swipe turns instead of zooming
+  if(!e.ctrlKey&&Math.abs(e.deltaX)>Math.abs(e.deltaY)*1.2){e.preventDefault();e.stopImmediatePropagation();orbit(e.deltaX*.25,0);}},{capture:true,passive:false});
+const held={};let spin=0;
+addEventListener('keydown',e=>{if(e.target.tagName==='INPUT'&&e.target.type!=='checkbox')return;if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)){held[e.key]=1;e.preventDefault();}});
+addEventListener('keyup',e=>{delete held[e.key];});addEventListener('blur',()=>{for(const k in held)delete held[k];spin=0;});
+for(const [id,dir] of [['turnL',-1],['turnR',1]]){const b=$(id);
+  b.addEventListener('pointerdown',e=>{spin=dir;b.setPointerCapture(e.pointerId);});
+  for(const ev of ['pointerup','pointercancel','lostpointercapture'])b.addEventListener(ev,()=>{spin=0;});}
+let gRot=0;addEventListener('gesturestart',e=>{gRot=e.rotation||0;e.preventDefault();});
+addEventListener('gesturechange',e=>{if(typeof e.rotation==='number'){orbit(gRot-e.rotation,0);gRot=e.rotation;}e.preventDefault();});
+function steer(dt){const k=dt*.09;let a=spin*k,el=0; // ~90° a second while a key or button is held
+  if(held.ArrowLeft)a-=k;if(held.ArrowRight)a+=k;if(held.ArrowUp)el+=k*.5;if(held.ArrowDown)el-=k*.5;if(a||el)orbit(a,el);}
+$('compass').addEventListener('click',()=>{const road=Math.abs(((heading()-ROAD+540)%360)-180)<1.5;face(road?0:ROAD);
+  $('compass').title=road?'North is up · tap for Madison Pike up':'Madison Pike is up · tap for north up';});
+
+// ---- Animation loop -----------------------------------------------------------------------
+let lastStep=0,lastT=0;const pv=new THREE.Vector3();
+function frame(t){requestAnimationFrame(frame);const dt=t-lastT;steer(Math.min(50,dt));lastT=t;
+  if(st.play&&t-lastStep>1600&&$('status').textContent==='Ready'){lastStep=t;if(st.h>=HIST.length-1)st.play=false;else st.h++;applyView();}
+  controls.update(Math.min(.1,dt/1000));ren.render(scene,cam); // the time step keeps the spin steady at any frame rate
+  $('needle').style.transform='rotate('+(-heading())+'deg)';
+  const tp=$('tap');if(tapOn){pv.copy(tapAt).project(cam);const vis=pv.z<1&&Math.abs(pv.x)<1.05&&Math.abs(pv.y)<1.05;tp.style.display=vis?'block':'none';
+    if(vis){tp.style.left=(pv.x+1)/2*innerWidth+'px';tp.style.top=(1-pv.y)/2*innerHeight+'px';}}
+}
+requestAnimationFrame(frame);sync();
+
+// ---- Start: manifest, elevation, today's photo, then the layers and buildings --------------------------
+try{status('Loading lidar elevation…');
+  if(!self.DecompressionStream)throw new Error('this browser is too old (needs DecompressionStream)');
+  M=await getFile('manifest.json','json');
+  const seen=new Set();
+  HIST=[...SERIES.hires.list,...COUNTY.map(([s,y])=>({svc:'linkgis:'+s,year:y})),...SERIES.summer.list]
+    .filter(e=>M.layers[e.svc]&&!seen.has(e.year)&&seen.add(e.year)).map(e=>({...e,note:NOTE[e.svc]||'Summer · USDA NAIP'}))
+    .sort((a,b)=>yk(a.year)-yk(b.year));
+  st.h=HIST.length-1;
+  let [b,i]=await Promise.all([grid(M.dem,M.canopy),grid(M.inset.dem,M.inset.canopy)]);
+  if(matchMedia('(pointer:coarse)').matches&&Math.min(screen.width,screen.height)<900)i=halve(i); // phones: every other point (~2.4 m) to save memory
+  T.base=b;T.inset=i;
+  zmin=Infinity;zmax=-Infinity;for(const v of b.dem){if(v<zmin)zmin=v;if(v>zmax)zmax=v;}
+  buildTerrain();heights();goTo(false);
+  $('sub').textContent='Morning View, KY · 3 × 3 miles · ground '+Math.round(zmin)+'–'+Math.round(zmax)+' ft';
+  await applyView();
+  OV=await getFile(M.overlays,'json');updateLayers();buildHouses();await buildTrees();
+  const names=[...new Set(OV.creeks.map(c=>c.n).filter(Boolean))].sort();$('creeks').textContent=names.length?'Creeks: '+names.join(', '):'';
+}catch(e){status('Problem loading data: '+e.message);console.error(e);}
+</script>
+</body>
+</html>
