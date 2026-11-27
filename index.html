@@ -64,6 +64,8 @@ input[type=range]{width:100%;accent-color:var(--acc)}
 .ticks{display:grid;grid-template-columns:1fr 1fr;gap:4px 8px}
 label.tick{font-size:13px;display:flex;gap:6px;align-items:center;cursor:pointer;min-height:26px}
 label.tick i{display:inline-block;width:10px;height:10px;border-radius:2px;flex:none}
+label.tick.soon{opacity:.5;cursor:default}
+label.tick small{font-size:10px;text-transform:uppercase;letter-spacing:.04em;border:1px solid currentColor;border-radius:3px;padding:0 3px;margin-left:2px}
 #status{position:fixed;right:10px;bottom:10px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:5px 10px;font-size:12px;color:var(--mute);z-index:5}
 #yearBig{position:fixed;right:16px;top:8px;font-size:42px;font-weight:800;letter-spacing:-.02em;text-shadow:0 2px 14px #000;pointer-events:none;z-index:4}
 #legend{display:none;grid-template-columns:1fr 1fr;gap:3px 8px;font-size:11px;margin-top:10px}
@@ -149,7 +151,7 @@ const yk=y=>({'1990s':1995,'2019–22':2020.5,'2022–24':2022.5})[y]||parseFloa
 let HIST=[]; // filled from the manifest: [{svc, year, note}], oldest first
 const SLOPE_KEY=[['#bedc8c','Flat, under 5°'],['#f0d65a','Gentle, 5–10°'],['#f0a53c','Moderate, 10–15°'],['#e06a2c','Steep, 15–20°'],['#b3262a','Very steep, 20–30°'],['#5a1236','Over 30°']];
 const LAYERS=[['trees','Trees','#3e6b2c',true],['roads','Roads','#ffffff',true],['water','Creeks & ponds','#3f93dc',true],['parcels','Property lines','#ffd84a',false],
-  ['flood','Floodplain','#2f8cff',false],['soils','Soils','#c9a15a',false]];
+  ['soils','Soils','#c9a15a',false],['waypoint','Waypoint','#ff6b35',false,'soon']]; // [key, name, swatch, on at start, 'soon' = placeholder, not built yet]
 
 const st={view:'today',h:0,play:false,lay:Object.fromEntries(LAYERS.map(l=>[l[0],l[3]]))};
 
@@ -279,7 +281,7 @@ function showTex(v){ // the 3-mile texture on both grids; a sharper close-up tex
   let ti=v.base;if(v.inset){ti=v.inset;ti.repeat.set(1/u.us,1/u.us);ti.offset.set(-u.u0/u.us,-u.v0/u.us);}
   T.inset.mat.map=ti;T.inset.mat.needsUpdate=true;}
 
-// ---- Layers: roads, water, property lines, driveways, flood, wetlands, soils, drawn onto see-through textures --------
+// ---- Layers: roads, water, property lines, driveways, soils (flood zones only feed the tap readout), drawn onto see-through textures --------
 let OV=null;
 const soilCol=s=>{let h=0;for(const ch of s)h=(h*31+ch.charCodeAt(0))>>>0;return 'hsla('+(h%360)+',55%,55%,';};
 function drawLayers(c,box){ // box = [x0, y0, x1, y1] in Mercator metres from the house
@@ -290,7 +292,6 @@ function drawLayers(c,box){ // box = [x0, y0, x1, y1] in Mercator metres from th
   const stroke=(lines,style,w,close)=>{g.strokeStyle=style;g.lineWidth=w;g.beginPath();lines.forEach(l=>{path(l);if(close)g.closePath();});g.stroke();};
   const L=st.lay;
   if(L.soils)for(const s of OV.soils){const c0=soilCol(s.s||s.n);fill(s.r,c0+'.38)');stroke(s.r,c0+'.9)',Math.max(1,1.2*m),true);}
-  if(L.flood)for(const f of OV.flood){if(!/^A/.test(f.z)&&!/0\.2/.test(f.s))continue;fill(f.r,/^A/.test(f.z)?'rgba(47,140,255,.42)':'rgba(140,190,255,.28)');}
   if(L.water){fill(OV.ponds,'#3f93dc');for(const k of OV.creeks)stroke([k.c],'#3f93dc',Math.max(2,(k.n?9:5)*m));}
   if(OV.tracks){g.setLineDash([Math.max(4,6*m),Math.max(3,4*m)]);stroke(OV.tracks.map(t=>t.c),'#d9b98a',Math.max(1.5,3*m));g.setLineDash([]);}
   if(L.parcels)stroke(OV.parcels,'#ffd84a',Math.max(1.5,1.6*m),true);
@@ -317,7 +318,7 @@ function updateLayers(){
   const ib=M.inset.bbox;drawLayers(overC.base,[-HM,-HM,HM,HM]);drawLayers(overC.inset,[ib[0]-CX,ib[1]-CY,ib[2]-CX,ib[3]-CY]);
   for(const [k,c] of Object.entries(overC)){const m=T[k].overMat;if(m.map)m.map.dispose();m.map=tex(c);
     if(k==='inset'){const u=T.inset.uv;m.map.repeat.set(1/u.us,1/u.us);m.map.offset.set(-u.u0/u.us,-u.v0/u.us);}m.needsUpdate=true;}}
-$('layers').innerHTML=LAYERS.map(([k,n,c])=>'<label class="tick"><input type="checkbox" data-k="'+k+'"><i style="background:'+c+'"></i>'+n+'</label>').join('');
+$('layers').innerHTML=LAYERS.map(([k,n,c,,soon])=>'<label class="tick'+(soon?' soon':'')+'"'+(soon?' title="Coming soon: drop your own waypoints on the map"':'')+'><input type="checkbox" data-k="'+k+'"'+(soon?' disabled':'')+'><i style="background:'+c+'"></i>'+n+(soon?'<small>soon</small>':'')+'</label>').join('');
 $('layers').addEventListener('change',e=>{const k=e.target.dataset.k;if(!k)return;st.lay[k]=e.target.checked;
   if(k==='trees'){trees.visible=st.lay.trees&&st.view!=='history';ren.shadowMap.needsUpdate=true;}else updateLayers();});
 

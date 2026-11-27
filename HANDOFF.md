@@ -1,131 +1,163 @@
-# Morning Viewer (formerly "farm map"): handoff for the next chat (Nov 25, 2026)
+# Morning Viewer: project handoff
 
-Project folder: `~/dev/morningViewer` (on Chris's Mac; was `~/dev/farm-map`). Main file: `index.html` (single-page three.js app, commented).
+*Updated Nov 27, 2026. This replaces the earlier running log, which is still in git history (commit `d23bea5`).*
+*For a new session: connect `~/dev/morningViewer` (Claude desktop app, "Add folder"), then point Claude at this file.*
 
-## Where things stand
-- `index.html` works: 3D lidar terrain (1 mi or 3 mi square around the house), drag/scroll/rotate,
-  views: Photo (summer NAIP 2004–2022, sharp 1990s–KyFromAbove Ph3), Land cover (NLCD 1992–2021), Topo (10 ft contours),
-  Lidar relief; Bare earth ↔ With trees morph (DSM − DEM); Pixel-art post shader; Isometric ortho camera; time-lapse play;
-  NHD creeks/ponds; click for elevation readout. 5-mile option removed (3 mi is enough).
-- `samples/` has screenshots from the first session.
-- Chris is fine with the site being public (public data); he'll make the house location less obvious himself.
-- Plan: host on **Vercel Hobby** (free, static, `npx vercel --prod`), probably via a GitHub repo.
-- Chris will rework the UI menu later.
+## What it is
 
-## Next task: bundle the data so the site doesn't depend on kyraster.ky.gov at runtime
-Right now every visitor's browser pulls data live from:
-- `https://kyraster.ky.gov/arcgis/rest/services/...` (ArcGIS ImageServer `exportImage`, bbox in EPSG:3857)
-  - elevation: `ElevationServices/Ky_DEM_KYAPED_5FT_WGS84WM` and `ElevationServices/Ky_DSM_First_Return_2FT_Phase2`
-    as `format=bsq&pixelType=F32` (n×n float32 values, then a trailing no-data bitmask of n×n/8 bytes)
-  - photos / land cover / hillshade: the layer lists in `SERIES` and `reliefTex()` in index.html
-- `https://hydro.nationalmap.gov/arcgis/rest/services/nhd/MapServer/{6,12}/query` (creeks, ponds as GeoJSON)
+A 3D, interactive map of Chris's parents' farm in Morning View, Kentucky (Kenton County), for the family and for
+hunting trips. It's one static web page (`index.html`, three.js 0.170 from jsDelivr) plus pre-built data in
+`data/area-3/`. It's built only from free public data, and nothing is fetched from the source servers at runtime.
 
-Goal: a script on the Mac (shell needs network access to those two hosts) that downloads everything for the
-1 mi and 3 mi boxes into `data/` (elevation as compressed binary or 16-bit PNG, images as JPEG/WebP, water as GeoJSON),
-then switch index.html to load from `data/` (falling back to live servers if a file is missing). Target ≲ 50 MB.
-Then deploy to Vercel.
+Chris is fine with it being public, since it's all public data. The house tag was removed from the map at his request.
 
-## Update (Nov 25, later): bundling built, waiting on the download
-- Neither Claude's cloud workspace nor the Mac sandbox shell can reach kyraster.ky.gov / hydro.nationalmap.gov
-  (egress allowlist), so the download runs in Chris's own Terminal.
-- `scripts/fetch_data.py` (stdlib + curl only): downloads everything for the 1 mi and 3 mi boxes into `data/_raw/`
-  (resumable; box and layer lists are read from index.html).
-- `scripts/build_data.py` (Pillow + numpy; Claude can run it in the sandbox shell): writes `data/area-{1,3}/`
-  with manifest.json, dem.bin / canopy.bin (gzip, delta-coded 16-bit ground + 8-bit canopy), WebP photos, PNG land cover,
-  relief.webp, water.json. Blank years are marked false in the manifest.
-- index.html now loads from `data/area-N/` when its manifest's bbox matches, falling back per file to the live servers.
-  The leftover 5-mile button was removed. Added vercel.json (1-day cache on /data), .vercelignore (skips _raw, samples, scripts), .gitignore.
-- Next: run fetch, then build, check total size (target ≲ 50 MB, tune with `--q` / `--q-big`), test, deploy.
+## Where things live
 
-## Update 2 (Nov 25): 3-mile only, much bigger download
-- Chris: the map is always the 3-mile view. Add property lines, sharper ground, roads/buildings/fences/fields,
-  newer photos, soils, floodplain, wetlands.
-- fetch_data.py rewritten (53 downloads into data/_raw/area-3/): 2 ft lidar DEM at 4096 (Phase3, Phase2 backup) + 5 ft,
-  2 ft first return at 2048; state photos + 2025 NOAA flood imagery; LINK-GIS county aerials 1962/1973/1989/1999/2023/2025/2026;
-  LINK-GIS parcels (geometry only, no owner fields), buildings, road centerlines for Kenton/Campbell/Pendleton;
-  NHD; FEMA NFHL layer 28 (KY portal copy as backup); NWI wetlands; SSURGO soils via Soil Data Access SQL; OSM via Overpass.
-- build_data.py still targets the OLD raw layout: rewrite it against the real download, then the app work
-  (new overlay views, 2048 terrain + lidar detail, drop the 1-mile button). Chris has app suggestions to fold in.
+| What | Where |
+|---|---|
+| Project folder | `~/dev/morningViewer` on Chris's Mac (was `~/dev/farm-map`) |
+| GitHub | `chrisrolling27/morningViewer`, private (assumed: Chris created it; confirm), branch `main`, 2 commits pushed Nov 25 |
+| Vercel | **Live** at https://morningviewer.vercel.app (confirmed Nov 27, 2026): Git deploy from `main`, preset "Other", no build command. Pushes to `main` redeploy. All 50 manifest files serve 200 (~101 MB), `/data/` cached 1 day. |
+| Claude-hosted copy | https://claude.ai/artifact/JZWSfWNi99VV9tBon5mVND (slug `8e354d6c-47e0-4e07-bd2b-1c1a9670907e`, last version `1795658341-ef26`, title "Morning Viewer"). Private unless Chris shares it. |
+| Run locally | `cd ~/dev/morningViewer && python3 -m http.server 8000`, then open http://localhost:8000. Double-clicking `index.html` doesn't work: browsers block `data/` on `file://`. |
 
-## Update 3 (Nov 25 evening): v1 live as a Claude artifact
-- Live (private until Chris shares): https://claude.ai/artifact/JZWSfWNi99VV9tBon5mVND (slug 8e354d6c-47e0-4e07-bd2b-1c1a9670907e)
-- build_data.py rewritten: data/area-3/ (~40 MB): base 1024 grid + 1-mile inset at 1.18 m from 2 ft lidar;
-  grids are gzip stored as base64 .txt (artifacts don't serve .bin; old .bin files are leftovers, in .vercelignore);
-  WebP photos incl. LINK-GIS 1962/1973/1989/2023/2025/2026 (1999 blank); overlays.json (parcels shapes only, buildings,
-  roads w/ names, creeks/ponds, flood (KY copy), wetlands, soils) in Mercator metres from the house.
-- index.html rewritten: 3 mi only, base grid with shader hole + fine inset grid, layer toggles, tap readout
-  (ground/tree height, soil, flood zone, wetland, parcel acres), opens with Madison Pike up (ROAD=3.7°), compass toggles
-  road-up / north-up, phones halve the inset grid. No live-server fallback anymore.
-- Tested headless (Chrome + SwiftShader): loads in ~16 s, readout works, no console errors.
-- Next: sharper inset photos (1-mile square at 4096 px) need kyraster.ky.gov + maps.linkgis.org (+ overpass-api.de)
-  allowed in claude.ai Settings > Capabilities, or a Terminal run on the Mac; build picks up raw files named inset-<raw>.
-  Then Vercel (GitHub repo + import), optional.
+## Chris's wishes and decisions (keep these)
 
-## Update 4 (Nov 25, ~5:30pm ET): v2 republished (artifact version 1795645714-f912)
-- Photos rebuilt clearer: WebP q80 (2048) / q76 (4096) + light unsharp mask (data/area-3 now ~58 MB).
-- New: 3D buildings (county footprints extruded to lidar roof height, on bare ground; 11 ft where lidar shows none),
-  road + creek names drawn along the lines (roads on by default), Slope map (with legend), crisp farm close-up
-  textures for Topo/Slope from the 1.2 m lidar, "Go to: Whole 3 miles / The farm, up close" buttons.
-- Sharper close-up PHOTOS still pending: fetch_data.py now also fetches inset-*.img (15 layers, 1-mile square at 4096 px)
-  + retries OSM/FEMA. Needs Chris's Mac network: double-click "Update Morning Viewer data.command" in this folder,
-  or allow kyraster.ky.gov / maps.linkgis.org / overpass-api.de in claude.ai Settings > Capabilities. Then run
-  build_data.py (sandbox) and republish (inset photos are wired in the app already via manifest.inset.layers).
+- **Name:** "Morning Viewer" everywhere (tab, header, preview image, docs); `morningViewer` for folder and repo.
+- **Simple UI.** One switch: **Today / Topo / Slope / History.**
+  - **Today** is the main, best view: the newest photo (county 2026), 3D trees and 3D buildings.
+  - **History** reveals a single timeline slider back to 1962, with no "photo sets". It starts at 2026; play runs oldest to newest.
+  - Topo and Slope are drawn from the lidar.
+- **Removed on purpose; don't bring back unless asked:**
+  - isometric camera
+  - height-boost slider (fixed at 2× relief)
+  - the old tree surface toggle (draped DSM: slow and ugly)
+  - pixel art, sun slider (fixed afternoon SW light)
+  - photo-set picker, land cover view, lidar relief view
+  - wetlands layer
+  - driveways toggle (driveways are always drawn now)
+  - Floodplain layer (removed Nov 27; flood zone still shows in the tap readout)
+  - the house tag (was "House", then "13299", then removed)
+- **Orientation:** opens on the farm close-up looking straight up **Madison Pike** (bearing 3.7°). The compass toggles road-up / north-up.
+- **Farm quality matters most:** sharpest photos and terrain in the mile around the house.
+- **Trees:** individual low-poly 3D trees from lidar treetops, as a **Trees layer checkbox** (on by default; hidden in History).
+- **Mac-friendly turning:**
+  - two-finger sideways swipe
+  - shift-drag
+  - ← → turn and ↑ ↓ tilt
+  - hold ⟲ ⟳ buttons
+  - Safari rotate gesture
+- **Slow 360° spin** button (~100 s per turn).
+- **Tap marker:** a pulsing HTML dot, not a 3D cylinder.
+- **Layers kept:** Trees, Roads (with names), Creeks & ponds (with names), Property lines, Soils, then **Waypoint** in the last slot. Driveways are always on.
+  - Waypoint is a greyed-out "soon" placeholder (`'soon'` as the 5th item in its `LAYERS` entry, which disables the checkbox). Next feature: users create waypoints on the map.
+- **Tap readout:** ground ft, trees/roof ft, distance and direction from the house, soil (name, farmland class, drainage), flood zone, parcel acres.
+- **Hosting:** GitHub → Vercel (Git deploy). Private repo. Chris pushes from his own Terminal.
 
-## Update 5 (Nov 25, ~5:30pm CT): farm close-up photos live (artifact version 1795649427-acc0)
-- Chris ran the fetch on his Mac. Farm close-up (1-mile square) now has 13 photo years at 4096 px (~0.4 m/px);
-  KyFromAbove 3-inch also at 8192 px (~0.2 m/px) for desktops (BIG = maxTextureSize>=8192 && fine pointer).
-  County 2025/2026 8k copies were built but dropped (no visible gain; KEEP_8K in build_data.py; in .vercelignore).
-  1962 has a gap over the farm, so it has no close-up. NOAA 2025 flood imagery doesn't cover the area.
-- build_data.py is now resumable: `--budget 105` stops starting new images after N s and exits 3; re-run to continue
-  (the Mac sandbox shell kills background jobs and caps calls at 180 s). Outputs newer than their raw inputs are skipped.
-- OSM: 234 driveways/service roads, 2 tracks, 54 field/wood outlines, no fences -> layer "Driveways & tracks".
-  FEMA NFHL now downloaded (same zones as the KY copy).
-- App: opens on the farm close-up (road-up), phones start with the panel folded, cache limit 3 on desktops,
-  link-preview thumbnail (thumb.jpg).
-- Data to deploy (excluding .bin and unused 8k) is ~107 MB: over Vercel Hobby's documented 100 MB CLI upload cap,
-  so for Vercel either drop some inset years or deploy via GitHub (git LFS not needed; largest file ~14 MB).
+## The app (`index.html`, all in one file, commented)
 
-## Update 6 (Nov 25, ~5:45pm CT): simplified app (artifact version 1795650294-e161)
-- Chris asked to simplify. One switch: Today / Topo / Slope / History.
-  Today = 2026 county photo + trees (first-return surface) + 3D buildings. Topo/Slope = bare earth + buildings.
-  History = one timeline, one photo per year (sharper flight wins when two share a year), 1962 -> 2026, bare earth,
-  no buildings; slider starts at 2026, play runs oldest -> newest. Phase 2 labelled 2019–22 (from its metadata).
-- Removed: tree toggle, isometric camera, height boost (fixed EX=2), pixel art, sun slider (fixed SW), orbit,
-  photo sets, land cover, lidar relief, flat buildings layer, 3D buildings toggle. Layers left: roads, creeks,
-  property lines, driveways, floodplain, wetlands, soils. Go-to: The farm / Whole 3 miles. Compass stays.
-- SERIES summer/hires/nlcd lines kept in index.html because fetch_data.py parses them.
-- Unused files still in data/area-3 (NLCD PNGs, relief.webp, county 8k): fine to leave out of a Vercel deploy.
+- **Area:** fixed 3-mile square centred on `FARM={lat:38.878617,lon:-84.535389}`, in Web Mercator (EPSG:3857).
+  - World units are ground metres: x east, z south, y up, house at (0,0).
+  - Ground metres = Mercator metres × cos(lat).
+- **Terrain:**
+  - Base grid 1024² (~4.7 m) over 3 mi, with a shader `discard` hole where the farm close-up goes.
+  - Inset grid 1366² (~1.18 m) over the middle third (1 mi), from the 2 ft lidar.
+  - Phones (coarse pointer, small screen) halve the inset grid.
+  - Heights are computed once at load (`heights()`).
+- **Textures:**
+  - The 3-mile photo on both grids.
+  - A sharper inset photo on the inner grid when the manifest has one, via repeat/offset into the inset.
+  - Desktops with `maxTextureSize ≥ 8192` (`BIG`) get the 8192 px inset where available.
+  - Topo/Slope are painted in-browser for both grids (`paintGrid`).
+- **Layers:** drawn onto two transparent 2048 canvases (3-mile + inset) laid over the terrain (`drawLayers`). Road and creek names are written along the lines.
+- **3D buildings:** county footprints extruded from bare ground to the lidar roof height (60th percentile of canopy samples; 11 ft if lidar shows none; max 40 ft). Hidden in History.
+- **3D trees:**
+  - `InstancedMesh` icosahedron crowns, plus trunks near the farm on desktop.
+  - Positions and heights come from `data/area-3/trees.txt`; colours are varied greens.
+  - Phones get low-detail crowns and half the outer trees.
+- **History list:** built from the manifest. `SERIES.hires` + `COUNTY` + `SERIES.summer`, one per year label; the sharper flight wins (listed first). Sorted by `yk()`: 1990s→1995, 2019–22→2020.5, 2022–24→2022.5.
+- **Keep the `summer:mk([...])`, `hires:mk([...])` and `nlcd:mk([...])` lines in their current shape.** `fetch_data.py` parses them with regexes, and also `FARM={lat:…,lon:…}`.
+- **Constants:** `EX=2`, `SUN=225`, `ROAD=3.7`, `TODAY='linkgis:Basemaps/AerialBase_2026_HighScale_CC_KC'`.
 
-## Update 7 (Nov 25, ~5:55pm CT): trees removed (artifact version 1795650813-2f39)
-- Chris: trees were slow and ugly. Surface is always bare earth now; heights() runs once at start. Canopy data still
-  drives 3D building heights and the tap readout (trees/roof ft).
+## Data (`data/area-3/`, ~105 MB used by the page)
 
-## Update 8 (Nov 25, ~6:05pm CT): 3D trees, pin 13299 (artifact version 1795651646-7fec)
-- Pin label is the house number 13299.
-- Trees: build_data.py finds lidar treetops (5x5 local max >= 15 ft on the 1.2 m close-up grid; 3x3 on the 4.7 m grid
-  elsewhere; building footprints masked out) -> data/area-3/trees.txt (gzip int16 x,z dm + height 0.1 ft, base64).
-  9,332 close-up + 39,616 elsewhere. App draws them as instanced low-poly crowns (+ trunks near the farm on desktop),
-  Today view only. Phones: low-detail crowns, half the outer trees.
-- Wetlands layer removed (readout line too). Driveways always drawn (no toggle).
+- `manifest.json` lists every file, the exact Mercator `bbox`, the inset `bbox`, and the grid encodings.
+  - `layers[svc]` = file name, or `false` = blank here.
+  - `inset.layers` = 4096 close-ups; `inset.layers8k` = 8192 close-ups; `trees`.
+- **Grids** `dem.txt`, `canopy.txt`, `inset-dem.txt`, `inset-canopy.txt`:
+  - gzip, stored as **base64 text**, because Claude artifacts won't serve `.bin`.
+  - DEM is uint16 steps of 0.05 ft above `base`, each stored as the difference from the previous value.
+  - Canopy is uint8 × 0.6 ft (clipped to 130 ft).
+- **Photos (WebP):**
+  - 3-mile versions: q80 at 2048, q76 at 4096, light unsharp mask.
+  - `inset-*.webp`: 13 years at 4096 px over 1 mi, about 0.4 m/px.
+  - `inset8k-ky-kyaped-phase3-3in.webp`: 8192 px, about 0.2 m/px. This is the only one worth it; the county 2025/2026 8k copies showed no gain, so `KEEP_8K` in the build drops them.
+- `overlays.json` holds flat coordinate arrays in Mercator metres from the house: parcels (**shapes only, no owner data**), buildings, roads (with names), creeks (with names), ponds, flood zones, wetlands (not shown), soils, OSM tracks and field edges.
+- `trees.txt`: gzip int16 triplets (x dm, z dm, height in 0.1 ft), base64. 9,332 in the close-up and 39,616 elsewhere.
+- **Unused but present (small):** NLCD PNGs, `relief.webp`, `ky-naip-2012-1m.webp` (2012 is shown from the 6-inch flight instead).
+- **Gaps:**
+  - 1962 has a gap over the farm, so it has no close-up.
+  - 1999 is blank here and left out.
+  - NOAA April 2025 flood imagery doesn't cover the area.
+  - OSM has no fences mapped.
 
-## Update 9 (Nov 25, ~6:10pm CT, from a separate chat): turning without a right mouse button
-- Chris's Mac trackpad couldn't right-drag. Added to index.html (on disk only, NOT yet republished to the artifact):
-  Orbit button (controls.autoRotate, speed .5, stops on any pointerdown), ⟲ ⟳ buttons + Q/E keys (eased 45° turns
-  via face()), O key toggles orbit, sideways two-finger trackpad swipe spins (capture-phase wheel listener ahead of
-  MapControls; vertical scroll still zooms). Shift/Cmd+drag already rotated (built into MapControls). Hint text updated.
-  Buttons sit in #turn above the compass. Syntax-checked but not yet tested in a browser; please keep it when editing.
+### Photo timeline (oldest → newest)
 
-## Update 9 (Nov 25, ~6:30pm CT): controls polish (artifact version 1795653062-1a3d)
-- House tag removed entirely. Tap marker is an HTML pin (dot + pulsing ring) instead of a 3D cylinder.
-- Trees are a layer (on by default; hidden in History). Spin 360° button (autoRotate, ~100 s per turn, frame-rate independent).
-- Mac turning: sideways two-finger swipe (wheel deltaX) turns; shift-drag; arrow keys turn/tilt; hold ⟲ ⟳ buttons;
-  Safari rotate gesture.
+1962, 1973, 1989 (county archive, B&W) · 1990s (USGS B&W) · 2004, 2006, 2008, 2010, 2014, 2016, 2018, 2020, 2022 (USDA NAIP summers)
+· 2007 (Northern KY planning, 6 in) · 2009 (USGS, 1 ft) · 2012 (KyFromAbove, 6 in) · 2019–22 (KyFromAbove Phase 2, 6 in)
+· 2022–24 (KyFromAbove Phase 3, 3 in, leaf-off; sharpest) · 2023, 2025, 2026 (county; 2026 is Today).
+The 2026 service's own description says "2018"; the layer names say 2026, and the picture clearly differs from the others.
 
-## Update 10 (Nov 25, ~7:45pm CT): shipping
-- Chris will create the GitHub repo himself ("morning viewer") and push from Terminal; then import on Vercel (Git deploy;
-  the 100 MB Hobby limit only applies to CLI uploads). Assumed a PRIVATE repo. Added README.md and a fuller .gitignore
-  (data/_raw with owner names, .bin leftovers, unused county 8k, build.log).
+## Rebuilding the data
 
-## Update 11 (Nov 25, ~8pm CT): renamed to Morning Viewer
-- Display name "Morning Viewer" (tab, header, preview image, artifact title); folder ~/dev/morningViewer; GitHub repo
-  morningViewer (Vercel lowercases project names: morningviewer); launcher "Update Morning Viewer data.command".
+1. **Download** (`scripts/fetch_data.py`, stdlib + curl, resumable):
+   - Must run on **Chris's Mac with normal internet**: Terminal, or double-click `Update Morning Viewer data.command`.
+   - Claude's sandboxes can't reach the map servers (egress allowlist).
+   - Writes `data/_raw/area-3/` (~300 MB, gitignored; **includes parcel owner names**, so never publish it).
+   - Re-running skips files it already has.
+2. **Build** (`scripts/build_data.py`, Pillow + numpy):
+   - Claude can run this in the Mac sandbox shell.
+   - That shell caps each call at ~180 s and kills background jobs. So use `python3 -u scripts/build_data.py --budget 105` and repeat until it exits 0 (exit 3 = more to do).
+   - Outputs newer than their raw inputs are skipped.
+
+**Sources and endpoints** (all in `fetch_data.py`):
+
+- **kyraster.ky.gov** (ImageServer `exportImage`):
+  - 2 ft DEM Phase 3 (Phase 2 as backup) at 4096²; 5 ft DEM; DSM first return 2 ft (Phase 2) at 2048².
+  - State photos, NLCD, hillshade.
+- **maps.linkgis.org** (MapServer `export`/`query`):
+  - Aerials: `Archive_Aerials/ArchiveAerial_1962|1973|1989|1999` (hide layer 0), `Basemaps/AerialBase_2023`, `…2025_HighScale_CC_KC_PC`, `…2026_HighScale_CC_KC`.
+  - Parcels: `CC_KC_PCTheme` layers 13 / 7 / 18 (Kenton / Campbell / Pendleton).
+  - Buildings 1 / 3 / 5; road centerlines `Street_Centerlines` 63 / 62 / 64.
+  - The box is entirely in Kenton County.
+- **hydro.nationalmap.gov:** NHD layers 6 (creeks) and 12 (ponds).
+- **Flood:** FEMA NFHL layer 28 (hazards.fema.gov), with the Kentucky copy as backup.
+- **Wetlands:** fwspublicservices.wim.usgs.gov (NWI).
+- **Soils:** sdmdataaccess.sc.egov.usda.gov (SSURGO via SQL).
+- **OpenStreetMap:** overpass-api.de.
+- **Farm close-up photos:** the middle third of the 4096 lidar grid, pixel-exact, at 4096 px. The 8k versions are 2×2 tiles of 4096, stitched in the build.
+
+## Gotchas for working on this with Claude
+
+- **Network:** Claude's cloud workspace and the Mac sandbox shell can only reach allowlisted hosts. Downloads need Chris's Terminal, or the domains added under claude.ai Settings → Capabilities. Computer use can't type into Terminal; it can only click there.
+- **File handoff:** after `device_commit_files`, wait a few seconds before relying on the file. The staged copy can be stale, which caused two silent mistakes.
+- **Deleting:** the connected folder doesn't allow deletes or git lock-file cleanup without permission. Chris runs git himself.
+- **Claude artifacts:**
+  - No `.bin`; ≤ 32 MB per file and 64 MB per publish call (patch mode keeps other files).
+  - Outside requests are limited to the allowed CDNs (jsDelivr is fine).
+  - Images load via fetch → blob.
+- **Vercel Hobby:** CLI uploads are capped at 100 MB, and the data is ~105 MB, so deploy through Git. GitHub orgs aren't allowed on Hobby; use the personal account.
+- **Headless test recipe:**
+  - Playwright + Chrome with `--use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader`.
+  - Serve the folder with `python3 -m http.server`, and route `cdn.jsdelivr.net` three.js requests to a local `npm i three@0.170.0`.
+  - Software rendering is very slow: use long screenshot timeouts, and drive the controls with `page.evaluate` clicks.
+
+## Ideas not done yet (only if Chris wants them)
+
+- Check it on a real phone (memory and frame rate with ~49k trees). Deploy is confirmed, and a 375×812 emulated view on the Mac loads with no errors, but that says nothing about real phone GPUs.
+- Trim unused files from the repo (NLCD, relief, NAIP 2012) to get under 100 MB.
+- Full-resolution zoom tiles (true 3-inch detail everywhere; ~1.5–3 GB, e.g. on Cloudflare R2).
+- **Waypoint (next up):** let users drop their own waypoints on the map. The layer slot is already there as a placeholder.
+- A private hunting layer (stands, blinds, trails, gates) kept out of the public site.
+- Sharper first-return lidar (DSM at 4096) for better tree detection near the farm; needs a new download.
+- Chris once said he'd rework the UI menu himself; the simplified panel above is the current state.
