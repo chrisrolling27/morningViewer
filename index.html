@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Morning Viewer</title>
 <link rel="artifact-thumbnail" href="thumb.jpg">
+<link rel="icon" id="favicon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cg stroke='%23f2b33d' stroke-width='5' stroke-linecap='round'%3E%3Cpath d='M32 4v9M32 51v9M4 32h9M51 32h9M12.2 12.2l6.4 6.4M45.4 45.4l6.4 6.4M12.2 51.8l6.4-6.4M45.4 18.6l6.4-6.4'/%3E%3C/g%3E%3Ccircle cx='32' cy='32' r='13' fill='%23ffc94d' stroke='%23e39a1f' stroke-width='2'/%3E%3C/svg%3E">
 <!--
   Morning Viewer: a 3D, interactive map of the family farm in Morning View, Kentucky, built only from free public data.
   Everything it shows is bundled in data/area-3/ (made by scripts/fetch_data.py, then scripts/build_data.py),
@@ -48,14 +49,15 @@ html,body{margin:0;height:100%;background:#0e1311;color:var(--ink);font:14px/1.4
 #panel{position:fixed;left:10px;top:10px;width:290px;max-height:calc(100% - 20px);overflow:auto;background:var(--panel);backdrop-filter:blur(8px);border:1px solid var(--line);border-radius:12px;padding:12px 13px;z-index:5}
 #panel.min .body{display:none}
 h1{font-size:16px;margin:0;display:flex;justify-content:space-between;align-items:center;gap:8px}
-h1 button{background:none;border:0;color:var(--mute);font-size:20px;cursor:pointer;padding:0 6px;min-width:32px;min-height:32px}
+h1 button{background:none;border:0;color:var(--acc);font-size:20px;cursor:pointer;padding:0 6px;min-width:32px;min-height:32px}
 .sub{color:var(--mute);font-size:12px;margin:2px 0 4px}
 .grp{margin-top:12px}
 .lab{font-size:12px;color:var(--mute);margin-bottom:5px;display:flex;justify-content:space-between;gap:8px}
 .seg{display:flex;gap:4px}
-.seg button,.pbtn{flex:1 1 0;background:transparent;color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:8px 4px;font:inherit;font-size:13px;cursor:pointer;min-height:38px}
+.seg button,.pbtn{flex:1 1 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:transparent;color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:8px 4px;font:inherit;font-size:13px;cursor:pointer;min-height:38px}
 .seg button.on{background:var(--acc);color:#1d1606;border-color:var(--acc);font-weight:600}
 .seg button:hover:not(.on){border-color:var(--mute)}
+button:focus,button:focus-visible{outline:none;box-shadow:none}
 .pbtn{flex:0 0 44px;font-size:15px}.pbtn.on{background:var(--acc);color:#1d1606}
 input[type=range]{width:100%;accent-color:var(--acc)}
 .row{display:flex;gap:8px;align-items:center}
@@ -75,6 +77,22 @@ label.tick small{font-size:10px;text-transform:uppercase;letter-spacing:.04em;bo
 .hint{font-size:11px;color:var(--mute);margin-top:8px}
 #compass{position:fixed;right:14px;bottom:44px;width:48px;height:48px;border-radius:50%;background:var(--panel);border:1px solid var(--line);padding:3px;cursor:pointer;z-index:5}
 #needle{display:block}
+#wps{position:fixed;inset:0;pointer-events:none;z-index:3;overflow:hidden}
+.wp{position:absolute;width:0;height:0;display:none}
+.wp i{position:absolute;left:-9px;top:-26px;width:18px;height:18px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:#ff6b35;border:2px solid #fff;box-shadow:0 1px 6px rgba(0,0,0,.6);pointer-events:auto;cursor:pointer}
+.wp span{position:absolute;left:12px;top:-30px;white-space:nowrap;max-width:180px;overflow:hidden;text-overflow:ellipsis;font-size:12px;font-weight:600;color:#fff;background:rgba(17,22,19,.82);border:1px solid rgba(255,107,53,.75);padding:1px 6px;border-radius:5px;pointer-events:auto;cursor:pointer}
+.wp.area span{left:0;top:0;transform:translate(-50%,-50%);border-style:dashed}
+.wp.dot i{left:-7px;top:-7px;width:14px;height:14px;border-radius:50%;transform:none;cursor:default}
+.wp.dot.first i{left:-9px;top:-9px;width:18px;height:18px;background:#fff;border-color:#ff6b35}
+.wp.sel i{background:var(--acc)}.wp.sel span{border-color:var(--acc);border-style:solid}
+body.wpAdd .wp i,body.wpAdd .wp span{pointer-events:none}
+#wpList{display:none;flex-wrap:wrap;gap:4px;margin-top:6px;font-size:11px;color:var(--mute)}
+#wpList button{background:transparent;color:var(--ink);border:1px solid rgba(255,107,53,.6);border-radius:12px;padding:3px 9px;font:inherit;font-size:12px;cursor:pointer;min-height:28px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#wpList button.area{border-style:dashed}
+#readout .wpAct,#readout .wpForm{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap}
+#readout button.rb{background:transparent;color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:5px 10px;font:inherit;font-size:12px;cursor:pointer;min-height:32px}
+#readout button.rb.pri{background:#ff6b35;border-color:#ff6b35;color:#fff;font-weight:600}
+#readout input.wpIn{flex:1 1 140px;min-width:0;background:rgba(0,0,0,.35);color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:6px 8px;font:inherit;font-size:16px}
 #tap{position:fixed;z-index:3;pointer-events:none;width:0;height:0;display:none}
 #tap i{position:absolute;left:-7px;top:-7px;width:14px;height:14px;border-radius:50%;background:var(--acc);border:2px solid #fff;box-shadow:0 1px 6px rgba(0,0,0,.6)}
 #tap b{position:absolute;left:-16px;top:-16px;width:32px;height:32px;border-radius:50%;border:2px solid var(--acc);animation:ping 1.6s ease-out infinite}
@@ -90,22 +108,24 @@ label.tick small{font-size:10px;text-transform:uppercase;letter-spacing:.04em;bo
 <div id="panel">
   <h1>Morning Viewer <button id="min" title="Hide controls">–</button></h1>
   <div class="body">
-    <div class="sub" id="sub">Loading…</div>
-    <div class="grp"><div class="seg" id="view"><button data-v="today">Today</button><button data-v="topo">Topo</button><button data-v="slope">Slope</button><button data-v="history">History</button></div></div>
+    <div class="grp"><div class="lab">Map</div><div class="seg" id="view"><button data-v="today">Today</button><button data-v="topo">Topo</button><button data-v="slope">Slope</button><button data-v="history">History</button></div></div>
     <div class="grp" id="timeline">
       <div class="lab"><span>Back in time</span><span id="yearLab"></span></div>
       <div class="row"><button id="play" class="pbtn" title="Play from oldest to newest">▶</button><input type="range" id="year" min="0" max="0" step="1" value="0" aria-label="Photo year"></div>
       <div id="yearNote"></div>
     </div>
     <div id="legend"></div>
+    <div class="grp"><div class="lab">Camera</div><div class="seg" id="goto"><button data-v="farm">The farm</button><button data-v="all" title="See the whole 3-mile square">Whole map</button><button data-v="spin" title="Slowly circle around (tap again to stop)">Spin 360°</button></div></div>
     <div class="grp"><div class="lab">Layers</div><div class="ticks" id="layers"></div></div>
-    <div class="grp"><div class="seg" id="goto"><button data-v="farm">The farm</button><button data-v="all">Whole 3 miles</button><button data-v="spin" title="Slowly circle around (tap again to stop)">Spin 360°</button></div></div>
-    <div id="creeks" class="hint"></div>
+    <div class="grp"><div class="lab"><span>Waypoints</span><span id="wpCount"></span></div>
+      <div class="seg" id="wpMode"><button data-v="point" title="Tap the map to drop a named point">Add point</button><button data-v="area" title="Tap the map to place the corners of an area">Add area</button></div>
+      <div id="wpList"></div></div>
     <div id="readout"></div>
-    <div class="hint">Drag to move · scroll or pinch to zoom · to turn: two-finger swipe sideways, shift-drag, ⟲ ⟳, or ← → keys (↑ ↓ tilt) · tap the land for elevation, soil, flood zone and parcel size.</div>
+    <div class="hint">W A S D move · Q E turn · ↑ ↓ tilt · Shift = faster</div>
   </div>
 </div>
 <div id="yearBig"></div>
+<div id="wps"></div>
 <div id="tap"><b></b><i></i></div>
 <button id="compass" title="Madison Pike is up · tap for north up" aria-label="Compass: switch between Madison Pike up and north up"><svg id="needle" viewBox="0 0 40 40" width="40" height="40"><path d="M20 4 L26 21 L20 18 L14 21 Z" fill="#d8342b"/><path d="M20 36 L14 19 L20 22 L26 19 Z" fill="#f3efe4"/><text x="20" y="13.5" text-anchor="middle" font-size="7" font-weight="700" fill="#fff">N</text></svg></button>
 <button class="turn" id="turnL" title="Turn left (or ← key; hold to keep turning)" aria-label="Turn view left">⟲</button>
@@ -151,7 +171,7 @@ const yk=y=>({'1990s':1995,'2019–22':2020.5,'2022–24':2022.5})[y]||parseFloa
 let HIST=[]; // filled from the manifest: [{svc, year, note}], oldest first
 const SLOPE_KEY=[['#bedc8c','Flat, under 5°'],['#f0d65a','Gentle, 5–10°'],['#f0a53c','Moderate, 10–15°'],['#e06a2c','Steep, 15–20°'],['#b3262a','Very steep, 20–30°'],['#5a1236','Over 30°']];
 const LAYERS=[['trees','Trees','#3e6b2c',true],['roads','Roads','#ffffff',true],['water','Creeks & ponds','#3f93dc',true],['parcels','Property lines','#ffd84a',false],
-  ['soils','Soils','#c9a15a',false],['waypoint','Waypoint','#ff6b35',false,'soon']]; // [key, name, swatch, on at start, 'soon' = placeholder, not built yet]
+  ['soils','Soils','#c9a15a',false],['waypoint','Waypoints','#ff6b35',true]]; // [key, name, swatch, on at start, optional 'soon' = greyed-out placeholder]
 
 const st={view:'today',h:0,play:false,lay:Object.fromEntries(LAYERS.map(l=>[l[0],l[3]]))};
 
@@ -242,7 +262,15 @@ function orbit(dAz,dEl){ // turn the view around what you're looking at (degrees
   off.copy(cam.position).sub(controls.target);sph.setFromVector3(off);
   sph.theta-=dAz*Math.PI/180;sph.phi=Math.min(Math.PI*.47,Math.max(.12,sph.phi-dEl*Math.PI/180));
   cam.position.copy(controls.target).add(off.setFromSpherical(sph));cam.lookAt(controls.target);controls.update();}
-function goTo(far){controls.target.set(0,far?0:pinPos.y,0);place(cam,controls.target,ROAD+180,far?40:38,far?S*1.5:2300);controls.update();}
+const FARM_VIEW={heading:ROAD+90,tilt:40,distance:1900,ahead:330}; // "The farm": facing east across Madison Pike (north on the left), the woods behind the house filling the middle
+function goTo(far){
+  if(far){controls.target.set(0,0,0);place(cam,controls.target,ROAD+180,40,S*1.5);controls.update();return;}
+  const v=FARM_VIEW,r=v.heading*Math.PI/180,x=Math.sin(r)*v.ahead,z=-Math.cos(r)*v.ahead,s=T.base&&T.base.geo?hAt(x,z):null; // look a little past the house
+  controls.target.set(x,s?s.h:pinPos.y,z);place(cam,controls.target,v.heading+180,v.tilt,v.distance);controls.update();}
+function startView(){controls.target.set(0,pinPos.y,0);place(cam,controls.target,ROAD+180,38,2300);controls.update();} // opening view: looking up Madison Pike
+// In the browser console, mvCam() prints the current camera, to copy a view into FARM_VIEW
+window.mvCam=()=>{const t=controls.target,off=cam.position.clone().sub(t),d=off.length(),h=heading();
+  return {heading:+h.toFixed(1),tilt:+(Math.asin(off.y/d)*180/Math.PI).toFixed(1),distance:Math.round(d),target:[Math.round(t.x),Math.round(t.z)]};};
 
 // ---- Map textures (a few kept in memory; big ones are dropped when not shown) ----------------
 const cache=new Map(),shown={base:null,inset:null};
@@ -296,6 +324,10 @@ function drawLayers(c,box){ // box = [x0, y0, x1, y1] in Mercator metres from th
   if(OV.tracks){g.setLineDash([Math.max(4,6*m),Math.max(3,4*m)]);stroke(OV.tracks.map(t=>t.c),'#d9b98a',Math.max(1.5,3*m));g.setLineDash([]);}
   if(L.parcels)stroke(OV.parcels,'#ffd84a',Math.max(1.5,1.6*m),true);
   if(L.roads){stroke(OV.roads.map(r=>r.c),'rgba(20,20,20,.75)',Math.max(3,10*m));stroke(OV.roads.map(r=>r.c),'#f4f1ea',Math.max(1.5,6*m));}
+  const ring=pts=>pts.flatMap(([x,z])=>[x/cosL,-z/cosL]); // waypoint corners are ground metres (x east, z south)
+  if(L.waypoint&&st.wp!=='point')for(const w of WPS)if(w.type==='area'){const r=ring(w.pts);fill([r],'rgba(255,107,53,.22)');stroke([r],WP_COL,Math.max(2,2.5*m),true);}
+  if(draft&&draft.length>1){const r=ring(draft);if(draft.length>2)fill([r],'rgba(255,107,53,.15)');
+    g.setLineDash([Math.max(6,8*m),Math.max(4,5*m)]);stroke([r],'#ffffff',Math.max(2,2*m),draft.length>2);g.setLineDash([]);}
   const size=sx>.6?26:30; // label size in canvas pixels (the close-up canvas has ~3x the detail)
   if(L.water)label(OV.creeks,'#bfe3ff',size*.85);
   if(L.roads)label(OV.roads,'#ffffff',size);
@@ -320,7 +352,7 @@ function updateLayers(){
     if(k==='inset'){const u=T.inset.uv;m.map.repeat.set(1/u.us,1/u.us);m.map.offset.set(-u.u0/u.us,-u.v0/u.us);}m.needsUpdate=true;}}
 $('layers').innerHTML=LAYERS.map(([k,n,c,,soon])=>'<label class="tick'+(soon?' soon':'')+'"'+(soon?' title="Coming soon: drop your own waypoints on the map"':'')+'><input type="checkbox" data-k="'+k+'"'+(soon?' disabled':'')+'><i style="background:'+c+'"></i>'+n+(soon?'<small>soon</small>':'')+'</label>').join('');
 $('layers').addEventListener('change',e=>{const k=e.target.dataset.k;if(!k)return;st.lay[k]=e.target.checked;
-  if(k==='trees'){trees.visible=st.lay.trees&&st.view!=='history';ren.shadowMap.needsUpdate=true;}else updateLayers();});
+  if(k==='trees'){trees.visible=st.lay.trees&&st.view!=='history';ren.shadowMap.needsUpdate=true;}else{if(k==='waypoint'){if(!st.lay.waypoint){if(st.wp)setMode(null);else if(wpSel){wpSel=null;say('');}}wpRender();}updateLayers();}});
 
 // ---- 3D buildings: county footprints raised to the roof height the lidar measured, standing on the bare ground ----
 const houses=new THREE.Mesh(new THREE.BufferGeometry(),new THREE.MeshStandardMaterial({vertexColors:true,roughness:.85,metalness:0}));
@@ -387,18 +419,116 @@ function describe(x,z){ // what's at this spot, from the layer data
   if(s)out.push('<b>Soil</b> '+esc(s.n)+(s.f?' · '+esc(s.f.toLowerCase()):'')+(s.d?' · '+esc(s.d.toLowerCase()):''));
   const f=OV.flood.find(f=>inRings(f.r,mx,my));
   if(f&&/^A/.test(f.z))out.push('<b>Flood</b> 100-year floodplain (zone '+esc(f.z)+')');else if(f&&/0\.2/.test(f.s))out.push('<b>Flood</b> 500-year floodplain');
-  const p=OV.parcels.find(r=>inRing(r,mx,my));if(p)out.push('<b>Parcel</b> about '+Math.round(area(p)/4046.86).toLocaleString()+' acres');
+  const p=OV.parcels.find(r=>inRing(r,mx,my));if(p)out.push('<b>Property</b> about '+Math.round(area(p)/4046.86).toLocaleString()+' acres');
   return out.join('<br>');}
+function spotText(x,z){ // the tap readout for a spot: ground, trees/roof, distance and direction from the house, soil, flood, parcel
+  const s=hAt(x,z);if(!s)return '';const mi=Math.hypot(x,z)/1609.34,brg=(Math.atan2(x,-z)*180/Math.PI+360)%360,more=describe(x,z);
+  return '<b>Ground</b> '+Math.round(s.g.dem[s.k])+' ft · trees/roof '+Math.round(s.g.can[s.k])+' ft · '+mi.toFixed(2)+' mi '+['N','NE','E','SE','S','SW','W','NW'][Math.round(brg/45)%8]+' of the house'+(more?'<br>'+more:'');}
 const rc=new THREE.Raycaster();
 const tapAt=new THREE.Vector3();let tapOn=false; // the tapped spot; drawn as an HTML pin in the frame loop
 let down=null;ren.domElement.addEventListener('pointerdown',e=>{down=[e.clientX,e.clientY];});
 ren.domElement.addEventListener('pointerup',e=>{if(!T.base||!T.base.geo||!down||e.button!==0||Math.hypot(e.clientX-down[0],e.clientY-down[1])>6)return;
   rc.setFromCamera(new THREE.Vector2(e.clientX/innerWidth*2-1,-e.clientY/innerHeight*2+1),cam);const o=rc.ray.origin.clone(),d=rc.ray.direction,step=1.5;
   for(let i=0;i<200000;i++){o.addScaledVector(d,step);const s=hAt(o.x,o.z);
-    if(s&&o.y<=s.h){const mi=Math.hypot(o.x,o.z)/1609.34,brg=(Math.atan2(o.x,-o.z)*180/Math.PI+360)%360,more=describe(o.x,o.z);
-      $('readout').innerHTML='<b>Ground</b> '+Math.round(s.g.dem[s.k])+' ft · trees/roof '+Math.round(s.g.can[s.k])+' ft · '+mi.toFixed(2)+' mi '+['N','NE','E','SE','S','SW','W','NW'][Math.round(brg/45)%8]+' of the house'+(more?'<br>'+more:'');
-      tapAt.set(o.x,s.h,o.z);tapOn=true;return;}
+    if(s&&o.y<=s.h){landTap(o.x,o.z,s.h,e);return;}
     if(o.y<-S)break;}});
+// ---- Waypoints: your own points and areas, saved only in this browser (localStorage), so no account is needed ----
+// Positions are ground metres from the house (x east, z south), like everything else. An area also keeps x, z at its middle for the label.
+// Add point / Add area are modes (st.wp) that show only that kind of waypoint; the Waypoint layer only shows or hides them.
+// To remove one, select it (pin, label, list chip or tap inside an area) and use Remove.
+const WP_KEY='morningViewer.waypoints.v1',WP_COL='#ff6b35';
+function wpId(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
+const mid=pts=>[pts.reduce((a,p)=>a+p[0],0)/pts.length,pts.reduce((a,p)=>a+p[1],0)/pts.length];
+const acres=pts=>{let a=0;for(let i=0,j=pts.length-1;i<pts.length;j=i++)a+=pts[j][0]*pts[i][1]-pts[i][0]*pts[j][1];return Math.abs(a/2)/4046.86;};
+const fmtAc=a=>a<10?a.toFixed(1):Math.round(a).toLocaleString();
+const WPS=(()=>{try{const a=JSON.parse(localStorage.getItem(WP_KEY)||'[]');if(!Array.isArray(a))return [];
+  return a.map(w=>{if(!w)return null;const b={id:String(w.id||wpId()),name:String(w.name||'Waypoint').slice(0,40),t:+w.t||Date.now()};
+    if(w.type==='area'&&Array.isArray(w.pts)){const pts=w.pts.map(p=>[+p[0],+p[1]]).filter(p=>Number.isFinite(p[0])&&Number.isFinite(p[1]));
+      if(pts.length<3)return null;const c=mid(pts);return {...b,type:'area',pts,x:c[0],z:c[1]};}
+    return Number.isFinite(+w.x)&&Number.isFinite(+w.z)?{...b,type:'point',x:+w.x,z:+w.z}:null;}).filter(Boolean);}
+  catch(e){return [];}})();
+function wpSave(){try{localStorage.setItem(WP_KEY,JSON.stringify(WPS));}catch(e){status('Could not save waypoints in this browser (private window, or storage full?)');}}
+let wpSel=null,wpTmp=null,wpGone=null,draft=null; // selected id · the new point placed in Add point · last removed (for Undo) · corners of the area being drawn
+st.wp=null;
+const wpShown=w=>!st.wp||st.wp===w.type; // in Add point / Add area, only that kind is drawn and listed
+const nextName=type=>(type==='area'?'Area ':'Point ')+(WPS.filter(w=>w.type===type).length+1);
+function wpRender(){const on=st.lay.waypoint,box=$('wps');
+  const pins=on?WPS.filter(wpShown).map(w=>[w,'<div class="wp'+(w.type==='area'?' area':'')+(w.id===wpSel?' sel':'')+'">'+(w.type==='area'?'':'<i></i>')+'<span>'+esc(w.name)+'</span></div>']):[];
+  const dots=(draft||[]).map((p,i)=>[{x:p[0],z:p[1]},'<div class="wp dot'+(i?'':' first')+'"><i></i></div>']);
+  box.innerHTML=[...pins,...dots].map(a=>a[1]).join('');[...box.children].forEach((d,i)=>{d._w=[...pins,...dots][i][0];});
+  const n=WPS.length,vis=WPS.some(wpShown);$('wpCount').textContent=n?n+' saved':'';
+  $('wpList').style.display=on&&vis?'flex':'none';
+  $('wpList').innerHTML=vis?WPS.map((w,i)=>!wpShown(w)?'':'<button data-i="'+i+'" class="'+w.type+'" title="Go to '+esc(w.name)+'">'+esc(w.name)+'</button>').join('')
+    :'';}
+function wpMark(){for(const d of $('wps').children)d.classList.toggle('sel',!!d._w&&d._w.id!==undefined&&d._w.id===wpSel);}
+function wpFrame(){
+  for(const d of $('wps').children){const w=d._w;if(!w)continue;
+    if(d._y===undefined&&T.base&&T.base.geo){const s=hAt(w.x,w.z);d._y=s?s.h:0;}
+    pv.set(w.x,d._y||0,w.z).project(cam);const vis=pv.z<1&&Math.abs(pv.x)<1.05&&Math.abs(pv.y)<1.05;d.style.display=vis?'block':'none';
+    if(vis){d.style.left=(pv.x+1)/2*innerWidth+'px';d.style.top=(1-pv.y)/2*innerHeight+'px';}}}
+const say=h=>{$('readout').innerHTML=h;};
+function setMode(v){st.wp=v;draft=v==='area'?[]:null;wpTmp=null;wpSel=null;tapOn=false;
+  if(v&&!st.lay.waypoint){st.lay.waypoint=true;sync();}
+  $('wpMode').querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));
+  document.body.classList.toggle('wpAdd',v==='point'||v==='area');ren.domElement.style.cursor=v==='point'||v==='area'?'crosshair':'';
+  wpRender();if(OV)updateLayers();
+  if(v)newUI();else say('');}
+// Add point and Add area share one form: the name box is ready as soon as the mode is on; tapping the map places the point
+// (tap again to move it) or the area's corners; Save (or Enter, or tapping the white first corner) keeps it.
+function newUI(){const area=st.wp==='area';
+  say('<b>New '+(area?'area':'point')+'</b> · <span id="wpStat"></span><div class="wpForm"><input class="wpIn" id="wpName" maxlength="40" autocomplete="off" aria-label="Waypoint name" value="'+esc(nextName(st.wp))+'">'+
+    '<button class="rb pri" data-a="save" id="wpSaveB">Save</button><button class="rb" data-a="cancel">Cancel</button></div>'+
+    (area?'<div class="wpAct"><button class="rb" data-a="undoPt" id="wpUndoB">Undo corner</button></div>':'')+'<div class="hint" id="wpHint"></div>');
+  newStat();const i=$('wpName');if(!matchMedia('(pointer:coarse)').matches){i.focus();i.select();}} // phones: no auto keyboard over the map
+function newStat(){if(!$('wpStat'))return;const area=st.wp==='area',n=area?draft.length:0,ok=area?n>2:!!wpTmp;
+  $('wpStat').textContent=area?(n?n+' corner'+(n>1?'s':'')+(n>2?' · about '+fmtAc(acres(draft))+' acres':''):'tap the map to place its corners')
+    :(wpTmp?'placed · tap the map again to move it':'tap the map where you want it');
+  $('wpSaveB').disabled=!ok;$('wpSaveB').style.opacity=ok?'':'.45';
+  if(area)$('wpUndoB').style.display=n?'':'none';
+  $('wpHint').textContent=area&&n>2?'Tap the white first corner, or Save, to close it.':'';}
+function nearFirst(e){const s=hAt(draft[0][0],draft[0][1]);pv.set(draft[0][0],s?s.h:0,draft[0][1]).project(cam);
+  return Math.hypot((pv.x+1)/2*innerWidth-e.clientX,(1-pv.y)/2*innerHeight-e.clientY)<22;}
+const areaAt=(x,z)=>st.lay.waypoint?[...WPS].reverse().find(w=>w.type==='area'&&inRing(w.pts.flat(),x,z)):null; // newest on top
+function landTap(x,z,h,e){
+  if(st.wp==='point'){wpTmp={type:'point',x,z};tapAt.set(x,h,z);tapOn=true;newStat();return;}
+  if(st.wp==='area'){if(draft.length>2&&nearFirst(e)){wpCommit();return;}draft.push([x,z]);wpRender();updateLayers();newStat();return;}
+  const a=areaAt(x,z);
+  wpSel=a?a.id:null;wpMark();tapAt.set(x,h,z);tapOn=true;
+  say(spotText(x,z)+(a?'<br><b style="color:'+WP_COL+'">'+esc(a.name)+'</b> · area, about '+fmtAc(acres(a.pts))+' acres'+
+    '<div class="wpAct"><button class="rb" data-a="rename">Rename area</button><button class="rb" data-a="del">Remove area</button></div>':''));}
+function wpShow(w){wpSel=w.id;wpTmp=null;tapOn=false;wpMark();
+  say('<b style="color:'+WP_COL+'">'+esc(w.name)+'</b>'+(w.type==='area'?' · area, about '+fmtAc(acres(w.pts))+' acres':'<br>'+spotText(w.x,w.z))+
+    '<div class="wpAct"><button class="rb" data-a="rename">Rename</button><button class="rb" data-a="del">Remove</button></div>');}
+function wpForm(name){ // rename a saved waypoint
+  say('<b>Rename</b><div class="wpForm"><input class="wpIn" id="wpName" maxlength="40" autocomplete="off" aria-label="Waypoint name" value="'+esc(name)+'">'+
+    '<button class="rb pri" data-a="save">Save</button><button class="rb" data-a="cancel">Cancel</button></div>');
+  const i=$('wpName');i.focus();i.select();}
+function wpCommit(){const name=($('wpName').value.trim()||'Waypoint').slice(0,40);let w;
+  if(st.wp==='area'||st.wp==='point'){
+    if(st.wp==='area'){if(draft.length<3)return;const c=mid(draft);w={id:wpId(),type:'area',name,pts:draft.slice(),x:c[0],z:c[1],t:Date.now()};}
+    else{if(!wpTmp)return;w={id:wpId(),type:'point',name,x:wpTmp.x,z:wpTmp.z,t:Date.now()};}
+    WPS.push(w);setMode(null);}
+  else{w=WPS.find(v=>v.id===wpSel);if(!w)return;w.name=name;}
+  wpSave();wpRender();wpShow(w);}
+function wpDel(w){const i=WPS.indexOf(w);if(i<0)return;WPS.splice(i,1);wpGone={w,i};if(wpSel===w.id)wpSel=null;wpSave();wpRender();if(w.type==='area')updateLayers();
+  say('Removed <b>'+esc(w.name)+'</b> <button class="rb" data-a="undo">Undo</button>');}
+function wpFly(w){const t=controls.target,off=cam.position.clone().sub(t),d=off.length(),s=hAt(w.x,w.z); // keep the current heading and tilt
+  t.set(w.x,s?s.h:0,w.z);place(cam,t,heading()+180,Math.asin(off.y/d)*180/Math.PI,Math.min(d,w.type==='area'?Math.max(500,Math.sqrt(acres(w.pts)*4046.86)*3):900));controls.update();}
+$('wpMode').addEventListener('click',e=>{const b=e.target.closest('button');if(b)setMode(st.wp===b.dataset.v?null:b.dataset.v);});
+$('readout').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;const a=b.dataset.a,w=WPS.find(v=>v.id===wpSel);
+  if(a==='save')wpCommit();
+  else if(a==='undoPt'&&draft){draft.pop();wpRender();updateLayers();newStat();}
+  else if(a==='cancel'){if(st.wp)setMode(null);else if(w)wpShow(w);}
+  else if(a==='rename'&&w)wpForm(w.name);
+  else if(a==='del'&&w)wpDel(w);
+  else if(a==='undo'&&wpGone){const g=wpGone;wpGone=null;WPS.splice(Math.min(g.i,WPS.length),0,g.w);wpSave();wpRender();if(g.w.type==='area')updateLayers();
+    wpShow(g.w);}});
+$('readout').addEventListener('keydown',e=>{if(e.target.id!=='wpName')return;e.stopPropagation();
+  if(e.key==='Enter'){e.preventDefault();wpCommit();}else if(e.key==='Escape'){e.preventDefault();$('readout').querySelector('[data-a=cancel]').click();}});
+addEventListener('keydown',e=>{if(e.key==='Escape'&&st.wp&&e.target.tagName!=='INPUT')setMode(null);});
+$('wps').addEventListener('click',e=>{const d=e.target.closest('.wp');const w=d&&d._w;if(!w||w.id===undefined)return;wpShow(w);});
+$('wpList').addEventListener('click',e=>{const b=e.target.closest('button'),w=b&&WPS[+b.dataset.i];if(!w)return;if(st.wp)setMode(null);wpFly(w);wpShow(w);});
+wpRender();
 addEventListener('resize',()=>{ren.setSize(innerWidth,innerHeight,false);cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix();});
 
 // ---- Views ---------------------------------------------------------------------------------------
@@ -429,15 +559,23 @@ $('min').addEventListener('click',()=>{$('panel').classList.toggle('min');$('min
 ren.domElement.addEventListener('wheel',e=>{ // a mouse wheel only scrolls up/down; a sideways two-finger swipe turns instead of zooming
   if(!e.ctrlKey&&Math.abs(e.deltaX)>Math.abs(e.deltaY)*1.2){e.preventDefault();e.stopImmediatePropagation();orbit(e.deltaX*.25,0);}},{capture:true,passive:false});
 const held={};let spin=0;
-addEventListener('keydown',e=>{if(e.target.tagName==='INPUT'&&e.target.type!=='checkbox')return;if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)){held[e.key]=1;e.preventDefault();}});
-addEventListener('keyup',e=>{delete held[e.key];});addEventListener('blur',()=>{for(const k in held)delete held[k];spin=0;});
+addEventListener('keydown',e=>{held.Shift=e.shiftKey;if(e.target.tagName==='INPUT'&&e.target.type!=='checkbox')return;if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)){held[e.key]=1;e.preventDefault();}
+  else if(['KeyQ','KeyE','KeyW','KeyA','KeyS','KeyD'].includes(e.code)&&!e.metaKey&&!e.ctrlKey&&!e.altKey){held[e.code]=1;e.preventDefault();}});
+  // Q / E turn the opposite way to ⟲ / ⟳; W A S D move; Shift moves faster (Cmd-Q, Cmd-W etc. are left alone)
+addEventListener('keyup',e=>{delete held[e.key];delete held[e.code];held.Shift=e.shiftKey;});addEventListener('blur',()=>{for(const k in held)delete held[k];spin=0;});
 for(const [id,dir] of [['turnL',-1],['turnR',1]]){const b=$(id);
   b.addEventListener('pointerdown',e=>{spin=dir;b.setPointerCapture(e.pointerId);});
   for(const ev of ['pointerup','pointercancel','lostpointercapture'])b.addEventListener(ev,()=>{spin=0;});}
 let gRot=0;addEventListener('gesturestart',e=>{gRot=e.rotation||0;e.preventDefault();});
 addEventListener('gesturechange',e=>{if(typeof e.rotation==='number'){orbit(gRot-e.rotation,0);gRot=e.rotation;}e.preventDefault();});
 function steer(dt){const k=dt*.09;let a=spin*k,el=0; // ~90° a second while a key or button is held
-  if(held.ArrowLeft)a-=k;if(held.ArrowRight)a+=k;if(held.ArrowUp)el+=k*.5;if(held.ArrowDown)el-=k*.5;if(a||el)orbit(a,el);}
+  if(held.ArrowLeft)a-=k;if(held.ArrowRight)a+=k;if(held.KeyQ)a+=k;if(held.KeyE)a-=k;if(held.ArrowUp)el+=k*.5;if(held.ArrowDown)el-=k*.5;if(a||el)orbit(a,el);
+  const f=(held.KeyW?1:0)-(held.KeyS?1:0),r=(held.KeyD?1:0)-(held.KeyA?1:0);if(!f&&!r)return;
+  // W A S D: slide the view along the ground, forward = the way the camera faces; speed scales with how far out you are
+  const t=controls.target,p=cam.position,fx=t.x-p.x,fz=t.z-p.z,fl=Math.hypot(fx,fz)||1,d=p.distanceTo(t);
+  const step=d*.7*(held.Shift?2.5:1)*dt/1000/Math.hypot(f,r),dx=(fx*f-fz*r)/fl*step,dz=(fz*f+fx*r)/fl*step;
+  const lim=S*.6,nx=Math.max(-lim,Math.min(lim,t.x+dx)),nz=Math.max(-lim,Math.min(lim,t.z+dz)); // stay over the map
+  p.x+=nx-t.x;p.z+=nz-t.z;t.x=nx;t.z=nz;}
 $('compass').addEventListener('click',()=>{const road=Math.abs(((heading()-ROAD+540)%360)-180)<1.5;face(road?0:ROAD);
   $('compass').title=road?'North is up · tap for Madison Pike up':'Madison Pike is up · tap for north up';});
 
@@ -447,8 +585,9 @@ function frame(t){requestAnimationFrame(frame);const dt=t-lastT;steer(Math.min(5
   if(st.play&&t-lastStep>1600&&$('status').textContent==='Ready'){lastStep=t;if(st.h>=HIST.length-1)st.play=false;else st.h++;applyView();}
   controls.update(Math.min(.1,dt/1000));ren.render(scene,cam); // the time step keeps the spin steady at any frame rate
   $('needle').style.transform='rotate('+(-heading())+'deg)';
-  const tp=$('tap');if(tapOn){pv.copy(tapAt).project(cam);const vis=pv.z<1&&Math.abs(pv.x)<1.05&&Math.abs(pv.y)<1.05;tp.style.display=vis?'block':'none';
+  const tp=$('tap');if(!tapOn)tp.style.display='none';else{pv.copy(tapAt).project(cam);const vis=pv.z<1&&Math.abs(pv.x)<1.05&&Math.abs(pv.y)<1.05;tp.style.display=vis?'block':'none';
     if(vis){tp.style.left=(pv.x+1)/2*innerWidth+'px';tp.style.top=(1-pv.y)/2*innerHeight+'px';}}
+  wpFrame();
 }
 requestAnimationFrame(frame);sync();
 
@@ -465,11 +604,9 @@ try{status('Loading lidar elevation…');
   if(matchMedia('(pointer:coarse)').matches&&Math.min(screen.width,screen.height)<900)i=halve(i); // phones: every other point (~2.4 m) to save memory
   T.base=b;T.inset=i;
   zmin=Infinity;zmax=-Infinity;for(const v of b.dem){if(v<zmin)zmin=v;if(v>zmax)zmax=v;}
-  buildTerrain();heights();goTo(false);
-  $('sub').textContent='Morning View, KY · 3 × 3 miles · ground '+Math.round(zmin)+'–'+Math.round(zmax)+' ft';
+  buildTerrain();heights();startView();
   await applyView();
   OV=await getFile(M.overlays,'json');updateLayers();buildHouses();await buildTrees();
-  const names=[...new Set(OV.creeks.map(c=>c.n).filter(Boolean))].sort();$('creeks').textContent=names.length?'Creeks: '+names.join(', '):'';
 }catch(e){status('Problem loading data: '+e.message);console.error(e);}
 </script>
 </body>

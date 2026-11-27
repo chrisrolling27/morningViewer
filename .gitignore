@@ -7,3 +7,5 @@ build.log
 .DS_Store
 .vercel/
 __pycache__/
+# project notes for Claude sessions: kept on this Mac only
+HANDOFF.md
